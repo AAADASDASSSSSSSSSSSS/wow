@@ -14,6 +14,8 @@ dev = ["pytest>=8.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# system %TEMP%\pytest-of-* has denied ACLs on this machine -> keep tmp in-repo
+addopts = "--basetemp=.pytest_tmp"
 
 [build-system]
 requires = ["setuptools>=68"]
