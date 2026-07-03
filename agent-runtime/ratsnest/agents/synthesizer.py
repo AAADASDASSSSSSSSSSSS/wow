@@ -53,7 +53,9 @@ def _augment_vout_mismatch(findings: list[Finding],
         rail = extra.get("output_rail") or ""
         r_top, r_bot = div.get("r_top") or {}, div.get("r_bottom") or {}
         target = parse_rail_voltage(rail)
-        vref = _match_vref(strategy, extra.get("value", ""), extra.get("lib_id", ""))
+        # match on Value only: lib symbols get reused across pin-compatible
+        # parts, so lib_id is not authoritative for part identity
+        vref = _match_vref(strategy, extra.get("value", ""))
         if not (target and vref and r_top.get("ohms") and r_bot.get("ohms")):
             continue
         expected = vref * (1 + r_top["ohms"] / r_bot["ohms"])

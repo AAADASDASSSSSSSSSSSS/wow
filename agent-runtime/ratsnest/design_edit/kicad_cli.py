@@ -24,6 +24,8 @@ def run_erc(project_dir: Path, config: Config | None = None) -> bool | None:
                 [str(config.kicad_cli), "sch", "erc", "--format", "json",
                  "--output", str(out), "--severity-error", str(sch)],
                 capture_output=True, text=True, timeout=120,
+                stdin=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if not out.exists():
                 return None

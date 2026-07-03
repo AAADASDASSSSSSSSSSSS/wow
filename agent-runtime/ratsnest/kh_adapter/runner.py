@@ -17,6 +17,9 @@ from ratsnest.schemas import AnalyzerOutput
 
 SUPPORTED_SCHEMA_PREFIX = "1."  # kicad-happy harmonized envelope v1.x
 
+# never flash console windows on the user's desktop (Windows only)
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 class AdapterError(RuntimeError):
     pass
@@ -55,6 +58,7 @@ class KicadHappyAdapter:
                 [sys.executable, str(script), str(target), "--output", str(out_path)],
                 capture_output=True, text=True, timeout=300,
                 stdin=subprocess.DEVNULL,  # pytest capture leaves stdin invalid on Windows
+                creationflags=NO_WINDOW,
             )
             if proc.returncode != 0 or not out_path.exists():
                 raise AdapterError(
