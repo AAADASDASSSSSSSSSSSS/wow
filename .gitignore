@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+runs/
+backend/target/
+*.egg-info/
+.idea/
+.vscode/
+benchmarks/seeded/*/
+!benchmarks/seeded/.gitkeep
+schemas/*.json
