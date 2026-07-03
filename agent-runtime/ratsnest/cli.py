@@ -69,6 +69,44 @@ def cmd_fix(args) -> int:
     return 0 if record.status in ("converged", "suggested") else 1
 
 
+def cmd_design(args) -> int:
+    """Full pipeline: requirement -> DesignSpec -> KiCad project -> review
+    loop -> markdown report. The user's words go in; a verified board and its
+    report come out."""
+    from ratsnest.agents import synthesize
+    from ratsnest.design_gen import generate_project, parse_requirement
+    from ratsnest.orchestrator import RunLoop
+    from ratsnest.reporting import write_report
+
+    config = Config.load()
+    _, strategy = StrategyRegistry(config.strategies_dir).load_active()
+
+    spec = parse_requirement(args.requirement)
+    out_dir = Path(args.out) if args.out else (
+        REPO_ROOT / "generated" / spec.project_name)
+    print(f"spec: {spec.input_voltage:g}V -> {spec.output_voltage:g}V, "
+          f"LED={spec.led or 'none'}  project={spec.project_name}")
+
+    generate_project(spec, out_dir, strategy, config)
+    print(f"generated: {out_dir}")
+
+    record = None
+    adapter = KicadHappyAdapter(config)
+    if args.no_fix:
+        ev = synthesize(adapter.analyze_all(out_dir), strategy, out_dir)
+    else:
+        record = RunLoop(config).execute(RunConfig(
+            project_dir=str(out_dir), max_iterations=args.max_iter,
+            run_erc=not args.no_erc))
+        ev = synthesize(adapter.analyze_all(out_dir), strategy, out_dir)
+        print(f"loop: {record.status} in {len(record.iterations)} iteration(s)")
+
+    report_path = write_report(out_dir / "ratsnest_report.md", ev, record, spec)
+    print(f"report: {report_path}")
+    _print_scorecard(ev.scorecard, ev.findings)
+    return 0 if ev.scorecard.severity_counts.get("error", 0) == 0 else 1
+
+
 def cmd_evolve(args) -> int:
     from ratsnest.evolution.experiment import run_default_experiment
     report = run_default_experiment(promote=args.promote,
@@ -126,6 +164,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-erc", action="store_true")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_fix)
+
+    p = sub.add_parser("design",
+                       help="generate a KiCad project from a requirement, "
+                            "review it, and write a report")
+    p.add_argument("requirement", help='e.g. "12V to 3.3V board with green LED"')
+    p.add_argument("--out", default=None, help="output project directory")
+    p.add_argument("--no-fix", action="store_true",
+                   help="generate + evaluate only, skip the repair loop")
+    p.add_argument("--max-iter", type=int, default=4)
+    p.add_argument("--no-erc", action="store_true")
+    p.set_defaults(func=cmd_design)
 
     p = sub.add_parser("evolve", help="run an AHE experiment (offline)")
     p.add_argument("--promote", action="store_true",

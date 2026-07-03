@@ -1,5 +1,10 @@
 """Generate the demo KiCad board (golden variant) used as benchmark corpus seed.
 
+FROZEN FIXTURE SOURCE — deliberately not refactored onto
+ratsnest/design_gen/templates.py (its productized descendant): the benchmark
+corpus must stay stable so changes to the evolving generator can never
+silently rewrite the exam it is graded against.
+
 Circuit: AP1117-ADJ adjustable LDO, 12V in -> 5V out, feedback divider R1/R2,
 LED indicator D1 with series resistor R3.
 

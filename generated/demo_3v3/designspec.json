@@ -1,0 +1,8 @@
+{
+  "project_name": "make_a_12v_to_3_3v_power_board_with_a_gr",
+  "input_voltage": 12.0,
+  "output_voltage": 3.3,
+  "output_current_a": 0.5,
+  "led": "green",
+  "requirement_text": "make a 12V to 3.3V power board with a green LED"
+}

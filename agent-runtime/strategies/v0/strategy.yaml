@@ -43,6 +43,10 @@ solver_params:
     1k: RC0805FR-071KL
     "330": RC0805FR-07330RL
     LED_RED: LTST-C170KRKT
+  # design generation assets (shared knowledge base with the repair loop)
+  resistor_mpn_pattern: RC0805FR-07{code}L
+  led_vf_by_color: {red: 2.0, green: 2.2, blue: 3.1, yellow: 2.1, white: 3.2}
+  led_mpn_map: {red: LTST-C170KRKT, green: LTST-C170GKT, blue: LTST-C170TBKT}
 
 prompts:
   # used only in LLM mode (deterministic mode is the default)

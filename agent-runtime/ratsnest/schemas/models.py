@@ -184,6 +184,21 @@ class TrajectoryEvent(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Design generation (user requirement -> KiCad project)
+# ---------------------------------------------------------------------------
+
+class DesignSpec(BaseModel):
+    """Structured requirement for the linear-regulator board family (gen v1)."""
+
+    project_name: str = "generated_board"
+    input_voltage: float = 12.0
+    output_voltage: float = 5.0
+    output_current_a: float = 0.5
+    led: Optional[str] = "red"  # LED color, or None for no indicator
+    requirement_text: str = ""
+
+
+# ---------------------------------------------------------------------------
 # Run lifecycle
 # ---------------------------------------------------------------------------
 

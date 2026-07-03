@@ -2,6 +2,7 @@ from ratsnest.schemas.models import (  # noqa: F401
     CONTRACT_VERSION,
     SEVERITIES,
     AnalyzerOutput,
+    DesignSpec,
     EvaluationResult,
     ExperimentReport,
     Finding,

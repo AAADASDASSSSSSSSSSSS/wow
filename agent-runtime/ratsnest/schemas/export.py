@@ -16,6 +16,7 @@ from ratsnest.schemas import models
 EXPORTED = [
     models.Finding,
     models.AnalyzerOutput,
+    models.DesignSpec,
     models.Scorecard,
     models.EvaluationResult,
     models.RepairOp,

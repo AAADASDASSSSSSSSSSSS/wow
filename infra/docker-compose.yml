@@ -1,0 +1,65 @@
+# RatsNest deployment — run everything in containers, no host Python/Java needed.
+#
+#   cd E:\agent-service-toolkit-main\kicad-happy-main   (context = dir with both repos)
+#   docker compose -f RatsNest/infra/docker-compose.yml build
+#   docker compose -f RatsNest/infra/docker-compose.yml run --rm tests      # full pytest suite
+#   docker compose -f RatsNest/infra/docker-compose.yml run --rm fix-demo   # closed-loop demo
+#   docker compose -f RatsNest/infra/docker-compose.yml run --rm evolve     # AHE experiment
+#   docker compose -f RatsNest/infra/docker-compose.yml up backend          # control plane :8080
+#
+# Run artifacts (run records, ATDP trajectories) land in RatsNest/runs on the host.
+
+name: ratsnest
+
+services:
+  # -- one-shot commands ----------------------------------------------------
+  tests:
+    build:
+      context: ../..
+      dockerfile: RatsNest/infra/docker/runtime.Dockerfile
+    image: ratsnest-runtime
+    entrypoint: ["python", "-m", "pytest", "tests", "-q"]
+    volumes:
+      - ../runs:/repo/RatsNest/runs
+
+  fix-demo:
+    image: ratsnest-runtime
+    build:
+      context: ../..
+      dockerfile: RatsNest/infra/docker/runtime.Dockerfile
+    entrypoint: >
+      sh -c "python -m ratsnest seed-defects &&
+             python -m ratsnest fix /repo/RatsNest/benchmarks/seeded/demo_board_defective --no-erc"
+    volumes:
+      - ../runs:/repo/RatsNest/runs
+
+  evolve:
+    image: ratsnest-runtime
+    build:
+      context: ../..
+      dockerfile: RatsNest/infra/docker/runtime.Dockerfile
+    entrypoint: ["python", "-m", "ratsnest", "evolve"]
+    volumes:
+      - ../runs:/repo/RatsNest/runs
+
+  # -- services ---------------------------------------------------------------
+  backend:
+    build:
+      context: ../..
+      dockerfile: RatsNest/infra/docker/backend.Dockerfile
+    image: ratsnest-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # inside the network, dispatch execs the runtime container's CLI is not
+      # possible across containers — the dev-profile dispatch expects a local
+      # python. For containerized dispatch, run backend+runtime in one pod/
+      # compose service or switch to the queue-based dispatch (Phase 5).
+      RATSNEST_PYTHON_EXE: python
+      RATSNEST_AGENT_RUNTIME_DIR: /repo/RatsNest/agent-runtime
+      RATSNEST_SELF_URL: http://backend:8080
+    volumes:
+      - backend-data:/app/data
+
+volumes:
+  backend-data:
