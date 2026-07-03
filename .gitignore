@@ -4,7 +4,10 @@ __pycache__/
 .pytest_cache/
 .pytest_tmp/
 runs/
+generated/
 backend/target/
+backend/data/
+*.kicad_prl
 *.egg-info/
 .idea/
 .vscode/

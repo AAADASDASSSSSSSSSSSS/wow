@@ -81,14 +81,20 @@ def cmd_design(args) -> int:
     config = Config.load()
     _, strategy = StrategyRegistry(config.strategies_dir).load_active()
 
+    quiet = getattr(args, "json", False)
+
+    def say(msg: str) -> None:
+        if not quiet:
+            print(msg)
+
     spec = parse_requirement(args.requirement)
     out_dir = Path(args.out) if args.out else (
         REPO_ROOT / "generated" / spec.project_name)
-    print(f"spec: {spec.input_voltage:g}V -> {spec.output_voltage:g}V, "
-          f"LED={spec.led or 'none'}  project={spec.project_name}")
+    say(f"spec: {spec.input_voltage:g}V -> {spec.output_voltage:g}V, "
+        f"LED={spec.led or 'none'}  project={spec.project_name}")
 
     generate_project(spec, out_dir, strategy, config)
-    print(f"generated: {out_dir}")
+    say(f"generated: {out_dir}")
 
     record = None
     adapter = KicadHappyAdapter(config)
@@ -99,10 +105,14 @@ def cmd_design(args) -> int:
             project_dir=str(out_dir), max_iterations=args.max_iter,
             run_erc=not args.no_erc))
         ev = synthesize(adapter.analyze_all(out_dir), strategy, out_dir)
-        print(f"loop: {record.status} in {len(record.iterations)} iteration(s)")
+        say(f"loop: {record.status} in {len(record.iterations)} iteration(s)")
 
     report_path = write_report(out_dir / "ratsnest_report.md", ev, record, spec)
-    print(f"report: {report_path}")
+    if quiet and record is not None:
+        # machine mode for control-plane dispatch: same RunRecord contract as `fix`
+        print(record.model_dump_json(indent=2))
+        return 0
+    say(f"report: {report_path}")
     _print_scorecard(ev.scorecard, ev.findings)
     return 0 if ev.scorecard.severity_counts.get("error", 0) == 0 else 1
 
@@ -174,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="generate + evaluate only, skip the repair loop")
     p.add_argument("--max-iter", type=int, default=4)
     p.add_argument("--no-erc", action="store_true")
+    p.add_argument("--json", action="store_true",
+                   help="print the RunRecord JSON (control-plane dispatch mode)")
     p.set_defaults(func=cmd_design)
 
     p = sub.add_parser("evolve", help="run an AHE experiment (offline)")

@@ -18,6 +18,8 @@ public class DesignRun {
     @Id
     private String id;
 
+    private String kind;            // "fix" | "design"
+    private String requirement;     // natural-language requirement (design runs)
     private String projectDir;
     private int maxIterations;
     private String status;          // dispatched|running|converged|escalated|failed
@@ -35,6 +37,7 @@ public class DesignRun {
     public static DesignRun create(String projectDir, int maxIterations) {
         DesignRun run = new DesignRun();
         run.id = UUID.randomUUID().toString();
+        run.kind = "fix";
         run.projectDir = projectDir;
         run.maxIterations = maxIterations;
         run.status = "dispatched";
@@ -42,8 +45,20 @@ public class DesignRun {
         return run;
     }
 
+    public static DesignRun createDesign(String requirement, String projectDir,
+                                         int maxIterations) {
+        DesignRun run = create(projectDir, maxIterations);
+        run.kind = "design";
+        run.requirement = requirement;
+        return run;
+    }
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+    public String getKind() { return kind; }
+    public void setKind(String kind) { this.kind = kind; }
+    public String getRequirement() { return requirement; }
+    public void setRequirement(String requirement) { this.requirement = requirement; }
     public String getProjectDir() { return projectDir; }
     public void setProjectDir(String projectDir) { this.projectDir = projectDir; }
     public int getMaxIterations() { return maxIterations; }

@@ -45,10 +45,15 @@ public class RunDispatchService {
     public void dispatch(String runId) {
         DesignRun run = runs.findById(runId).orElseThrow();
         try {
-            List<String> cmd = List.of(
-                    pythonExe, "-m", "ratsnest", "fix", run.getProjectDir(),
-                    "--max-iter", String.valueOf(run.getMaxIterations()),
-                    "--no-erc", "--json");
+            List<String> cmd = "design".equals(run.getKind())
+                    ? List.of(pythonExe, "-m", "ratsnest", "design",
+                              run.getRequirement(), "--out", run.getProjectDir(),
+                              "--max-iter", String.valueOf(run.getMaxIterations()),
+                              "--json")
+                    : List.of(pythonExe, "-m", "ratsnest", "fix",
+                              run.getProjectDir(),
+                              "--max-iter", String.valueOf(run.getMaxIterations()),
+                              "--no-erc", "--json");
             ProcessBuilder pb = new ProcessBuilder(cmd)
                     .directory(new File(agentRuntimeDir))
                     .redirectErrorStream(false);
