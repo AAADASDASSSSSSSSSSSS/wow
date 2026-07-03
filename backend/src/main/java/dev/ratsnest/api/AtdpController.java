@@ -26,10 +26,21 @@ public class AtdpController {
 
     private final AtdpEventRepository events;
     private final DesignRunRepository runs;
+    private final org.springframework.beans.factory.ObjectProvider<
+            org.springframework.kafka.core.KafkaTemplate<String, String>> kafka;
 
-    public AtdpController(AtdpEventRepository events, DesignRunRepository runs) {
+    @org.springframework.beans.factory.annotation.Value("${ratsnest.dispatch:local}")
+    private String dispatchMode;
+
+    @org.springframework.beans.factory.annotation.Value("${ratsnest.topic.atdp-events:ratsnest.atdp-events}")
+    private String atdpTopic;
+
+    public AtdpController(AtdpEventRepository events, DesignRunRepository runs,
+                          org.springframework.beans.factory.ObjectProvider<
+                                  org.springframework.kafka.core.KafkaTemplate<String, String>> kafka) {
         this.events = events;
         this.runs = runs;
+        this.kafka = kafka;
     }
 
     /** Ingest one ATDP TrajectoryEvent from the agent runtime's data proxy. */
@@ -48,6 +59,15 @@ public class AtdpController {
         event.setReceivedAt(Instant.now());
         event.setPayload(body);
         events.save(event);
+        // cluster mode: the ATDP stream also flows onto Kafka, so evolution
+        // consumers can subscribe without polling the trajectory store
+        if ("kafka".equals(dispatchMode)) {
+            try {
+                kafka.getObject().send(atdpTopic, event.getRunId(), body);
+            } catch (Exception ignored) {
+                // trajectory capture must never break ingestion
+            }
+        }
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(Map.of("eventId", String.valueOf(event.getEventId())));
     }

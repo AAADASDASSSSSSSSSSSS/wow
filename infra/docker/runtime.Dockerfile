@@ -16,7 +16,7 @@ COPY kicad-happy-main/ /repo/kicad-happy-main/
 COPY RatsNest/agent-runtime/ /repo/RatsNest/agent-runtime/
 COPY RatsNest/benchmarks/ /repo/RatsNest/benchmarks/
 
-RUN pip install --no-cache-dir pydantic>=2.5 pyyaml>=6.0 httpx>=0.27 pytest>=8.0
+RUN pip install --no-cache-dir "pydantic>=2.5" "pyyaml>=6.0" "httpx>=0.27" "pytest>=8.0" "kafka-python>=2.0"
 
 # kicad-cli is not in this image (KiCad is ~2GB); ERC is feature-gated off.
 ENV RATSNEST_RUNS_DIR=/repo/RatsNest/runs

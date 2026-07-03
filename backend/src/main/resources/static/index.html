@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RatsNest — Design Control Plane</title>
+<style>
+  :root { --bg:#0f1420; --panel:#171e2e; --line:#2a3550; --text:#dce3f2;
+          --dim:#8593ad; --accent:#5b8cff; --ok:#3ecf8e; --warn:#e8b93e; --err:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.5 "Segoe UI",system-ui,sans-serif; }
+  header { padding:14px 24px; border-bottom:1px solid var(--line);
+           display:flex; align-items:baseline; gap:14px; }
+  header h1 { margin:0; font-size:18px; letter-spacing:.5px; }
+  header span { color:var(--dim); font-size:12px; }
+  main { display:grid; grid-template-columns: 400px 1fr; gap:16px; padding:16px 24px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           padding:16px; margin-bottom:16px; }
+  .panel h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase;
+              letter-spacing:1px; color:var(--dim); }
+  input, textarea, button {
+    width:100%; background:#0d1220; color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:9px 11px; font:inherit; }
+  textarea { resize:vertical; min-height:64px; }
+  button { background:var(--accent); border:0; color:#fff; font-weight:600;
+           cursor:pointer; margin-top:10px; }
+  button:disabled { opacity:.5; cursor:wait; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--dim); font-weight:500; padding:6px 8px;
+       border-bottom:1px solid var(--line); }
+  td { padding:7px 8px; border-bottom:1px solid #1e2740; }
+  tr.sel td, tr:hover td { background:#1c2540; cursor:pointer; }
+  .badge { display:inline-block; padding:1px 9px; border-radius:99px; font-size:11px;
+           font-weight:600; }
+  .converged,.suggested { background:rgba(62,207,142,.15); color:var(--ok); }
+  .running,.dispatched { background:rgba(91,140,255,.15); color:var(--accent); }
+  .escalated,.failed { background:rgba(255,107,107,.15); color:var(--err); }
+  .score { font-size:34px; font-weight:700; }
+  .score small { font-size:14px; color:var(--dim); font-weight:400; }
+  .kv { color:var(--dim); font-size:12px; margin-top:4px; word-break:break-all; }
+  .timeline { max-height:340px; overflow-y:auto; }
+  .evt { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid #1e2740;
+         font-size:12.5px; }
+  .evt .node { min-width:110px; color:var(--accent); font-weight:600; }
+  .evt .reward { min-width:60px; text-align:right; }
+  .reward.pos { color:var(--ok); } .reward.neg { color:var(--err); }
+  .evt .detail { color:var(--dim); flex:1; word-break:break-all; }
+  .muted { color:var(--dim); }
+  pre { background:#0d1220; border:1px solid var(--line); border-radius:6px;
+        padding:10px; font-size:12px; overflow:auto; max-height:220px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐀 RatsNest</h1>
+  <span>auto-evolving multi-agent KiCad design system — control plane dashboard</span>
+</header>
+<main>
+  <section>
+    <div class="panel">
+      <h2>New design from requirement</h2>
+      <textarea id="req" placeholder='e.g. "a 12V to 3.3V power board with a green LED"'></textarea>
+      <button id="btnDesign" onclick="submitDesign()">Generate &amp; verify design</button>
+    </div>
+    <div class="panel">
+      <h2>Repair an existing project</h2>
+      <input id="projDir" placeholder="absolute path to a KiCad project directory">
+      <button id="btnFix" onclick="submitFix()">Run auto-fix loop</button>
+    </div>
+    <div class="panel">
+      <h2>Runs</h2>
+      <table>
+        <thead><tr><th>kind</th><th>status</th><th>score</th><th>created</th></tr></thead>
+        <tbody id="runsBody"></tbody>
+      </table>
+    </div>
+  </section>
+  <section id="detail">
+    <div class="panel"><h2>Run detail</h2><div class="muted">Select a run…</div></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let selected = null;
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function submitDesign() {
+  const req = $("req").value.trim();
+  if (!req) return;
+  $("btnDesign").disabled = true;
+  try {
+    const res = await api("/api/designs", { method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ requirement: req }) });
+    selected = res.runId;
+  } finally { $("btnDesign").disabled = false; refresh(); }
+}
+
+async function submitFix() {
+  const dir = $("projDir").value.trim();
+  if (!dir) return;
+  $("btnFix").disabled = true;
+  try {
+    const res = await api("/api/runs", { method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ projectDir: dir }) });
+    selected = res.runId;
+  } finally { $("btnFix").disabled = false; refresh(); }
+}
+
+function badge(s) { return `<span class="badge ${s}">${s}</span>`; }
+
+async function refresh() {
+  const runs = await api("/api/runs");
+  runs.sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||""));
+  $("runsBody").innerHTML = runs.map(r => `
+    <tr onclick="select('${r.id}')" class="${r.id===selected?'sel':''}">
+      <td>${r.kind||"fix"}</td><td>${badge(r.status)}</td>
+      <td>${r.finalScore ?? "—"}</td>
+      <td class="muted">${(r.createdAt||"").replace("T"," ").slice(5,19)}</td>
+    </tr>`).join("");
+  if (selected) renderDetail();
+}
+
+async function select(id) { selected = id; refresh(); }
+
+async function renderDetail() {
+  let run, events = [];
+  try { run = await api(`/api/runs/${selected}`); } catch { return; }
+  try { events = await api(`/api/runs/${selected}/events`); } catch {}
+  const record = run.resultJson ? JSON.parse(run.resultJson) : null;
+  const iters = record ? record.iterations : [];
+  const rationale = iters.flatMap(it => Object.entries(it.patch_plan?.rationale||{})
+      .map(([fid, why]) => `<div class="evt"><div class="node">iter ${it.iteration}</div>
+        <div class="detail"><b>${fid}</b> — ${why}</div></div>`)).join("");
+  $("detail").innerHTML = `
+    <div class="panel">
+      <h2>Run ${run.id.slice(0,8)} — ${run.kind||"fix"} ${badge(run.status)}</h2>
+      <div class="score">${run.finalScore ?? "…"}<small>/100
+        ${run.initialScore!=null ? " (from "+run.initialScore+")" : ""}</small></div>
+      <div class="kv">${run.requirement ? "requirement: "+run.requirement : "project: "+(run.projectDir||"")}</div>
+      <div class="kv">strategy: ${run.strategyVersionId||"—"} · python run: ${run.pythonRunId||"—"}</div>
+    </div>
+    ${iters.length ? `<div class="panel"><h2>Repair iterations</h2>
+      <table><thead><tr><th>#</th><th>score</th><th>Δ</th><th>ops</th><th>resolved</th></tr></thead>
+      <tbody>${iters.map(it => `<tr><td>${it.iteration}</td>
+        <td>${it.scorecard.score}</td><td>${(it.score_delta>=0?"+":"")+it.score_delta}</td>
+        <td>${it.patch_plan ? it.patch_plan.ops.length : 0}</td>
+        <td>${it.resolved_findings.length}</td></tr>`).join("")}</tbody></table>
+      ${rationale ? `<h2 style="margin-top:14px">Repair rationale</h2>${rationale}` : ""}
+      ${record.escalation ? `<h2 style="margin-top:14px">Escalation</h2>
+        <pre>${JSON.stringify(record.escalation,null,2)}</pre>` : ""}
+    </div>` : ""}
+    <div class="panel"><h2>ATDP trajectory (${events.length} events)</h2>
+      <div class="timeline">${events.map(e => {
+        const p = JSON.parse(e.payload||"{}");
+        const detail = e.node==="mcp_tool"
+          ? (p.action?.tool||"") + " " + JSON.stringify(p.action?.arguments||{}).slice(0,90)
+          : JSON.stringify(p.outcome||{}).slice(0,110);
+        const rw = e.reward==null ? "" :
+          `<div class="reward ${e.reward>=0?"pos":"neg"}">${e.reward>=0?"+":""}${e.reward}</div>`;
+        return `<div class="evt"><div class="node">${e.iteration}·${e.node}</div>
+                ${rw}<div class="detail">${detail}</div></div>`;
+      }).join("") || '<div class="muted">no events yet</div>'}</div>
+    </div>`;
+}
+
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>

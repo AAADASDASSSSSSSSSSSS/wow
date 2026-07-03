@@ -51,15 +51,67 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # inside the network, dispatch execs the runtime container's CLI is not
-      # possible across containers — the dev-profile dispatch expects a local
-      # python. For containerized dispatch, run backend+runtime in one pod/
-      # compose service or switch to the queue-based dispatch (Phase 5).
       RATSNEST_PYTHON_EXE: python
       RATSNEST_AGENT_RUNTIME_DIR: /repo/RatsNest/agent-runtime
       RATSNEST_SELF_URL: http://backend:8080
     volumes:
       - backend-data:/app/data
 
+  # -- cluster mode: Postgres + Kafka + queue-consuming worker -----------------
+  #   docker compose -f RatsNest/infra/docker-compose.yml --profile cluster up
+  postgres:
+    image: postgres:16-alpine
+    profiles: [cluster]
+    environment:
+      POSTGRES_DB: ratsnest
+      POSTGRES_USER: ratsnest
+      POSTGRES_PASSWORD: ratsnest
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+
+  kafka:
+    image: apache/kafka:3.8.0
+    profiles: [cluster]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9094:9094"
+
+  backend-cluster:
+    image: ratsnest-backend
+    profiles: [cluster]
+    depends_on: [postgres, kafka]
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: cluster
+      RATSNEST_DB_URL: jdbc:postgresql://postgres:5432/ratsnest
+      RATSNEST_KAFKA: kafka:9092
+      RATSNEST_SELF_URL: http://backend-cluster:8080
+
+  worker:
+    image: ratsnest-runtime
+    profiles: [cluster]
+    depends_on: [kafka, backend-cluster]
+    entrypoint: ["python", "-m", "ratsnest.worker"]
+    environment:
+      RATSNEST_KAFKA: kafka:9092
+    volumes:
+      - ../runs:/repo/RatsNest/runs
+      - worker-projects:/tmp/ratsnest-designs
+
 volumes:
   backend-data:
+  pg-data:
+  worker-projects:

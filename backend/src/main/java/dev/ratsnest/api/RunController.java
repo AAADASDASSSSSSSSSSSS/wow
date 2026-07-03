@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -61,6 +62,22 @@ public class RunController {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(Map.of("runId", run.getId(), "status", run.getStatus(),
                         "projectDir", projectDir));
+    }
+
+    /** Worker callback (kafka dispatch mode): RunRecord JSON in, row updated. */
+    @PutMapping("/runs/{id}/result")
+    public ResponseEntity<Map<String, String>> putResult(
+            @PathVariable String id, @RequestBody String runRecordJson) {
+        return runs.findById(id).map(run -> {
+            try {
+                dispatch.applyResult(run, runRecordJson);
+            } catch (Exception e) {
+                run.setStatus("failed");
+            }
+            run.setFinishedAt(java.time.Instant.now());
+            runs.save(run);
+            return ResponseEntity.ok(Map.of("status", run.getStatus()));
+        }).orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/runs")

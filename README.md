@@ -75,17 +75,36 @@ K8s starting manifests: `infra/k8s/ratsnest.yaml` (syntax-only validated — no 
 | `RATSNEST_RUNS_DIR` | `./runs` | run records + trajectories |
 | `RATSNEST_CONTROL_PLANE_URL` | *(unset)* | if set, ATDP events also POST to Spring backend |
 
+## Design creation backends
+
+| Backend | What it does |
+|---|---|
+| `template` (default) | deterministic S-expression writer, self-contained symbols |
+| `mcp` | **sub-agents drive real KiCad** through the vendored [KiCAD-MCP-Server](../KiCAD-MCP-Server-main) (122 tools, SWIG/pcbnew): `create_project` → place from KiCad's official symbol libraries (LM317 etc.) → pin-snapped net labels → save. Every MCP tool call is intercepted as an ATDP event. |
+
+```powershell
+& $py -m ratsnest design "a 12V to 5V board with a red LED" --backend mcp
+```
+
+Both backends solve values from the SAME strategy assets (Vref table, E-series,
+MPN patterns) and both are judged by the same kicad-happy loop — one evolvable
+knowledge base governs every path a design can be created through.
+
+Requires: Node ≥ 18, the server built (`npm install && npm run build` in its dir),
+and KiCad 10 (its bundled python provides pcbnew; deps: `pip install sexpdata kicad-skip`).
+
 ## Status (2026-07-03)
 
 **Working end-to-end, 35 tests green (host and in Docker):**
-- design generation: requirement → DesignSpec → KiCad project (regulator family), ERC-clean
+- design generation: requirement → DesignSpec → KiCad project, via template OR real-KiCad MCP sub-agents; ERC-clean
 - review: kicad-happy analyzers (unforked) + synthesizer augmentation + suppressions → scorecard
 - auto-fix loop: findings → repair mappings → patch plans → verify (score-monotonic + new-critical veto) → converge/escalate
-- ATDP: every node emits trajectory events (JSONL + HTTP sink to the Java store)
+- ATDP: every orchestrator node AND every MCP tool call emits trajectory events (JSONL + HTTP sink; Kafka topic in cluster mode)
 - AHE v1: benchmark w/ seeded-defect ground truth, candidate-vs-incumbent experiments,
   promotion gates (verified to promote a good candidate and reject a sabotaged one), rollback
-- Spring control plane: runs/designs REST API, ATDP trajectory store, async dispatch (H2)
-- Docker: runtime + backend images, compose services; K8s manifests (untested, no cluster)
+- Spring control plane: runs/designs REST API, ATDP trajectory store, dual dispatch (local subprocess / Kafka queue)
+- **Dashboard** at `http://localhost:8080/` — design form, runs, scorecards, repair rationale, ATDP timeline (zero-build static page; Vite/Vue can replace it without API changes)
+- **Cluster mode**: `docker compose -f RatsNest/infra/docker-compose.yml --profile cluster up` → Postgres 16 + Kafka (KRaft) + backend (cluster profile) + Python Kafka worker. Code-complete and compose-validated; full cluster e2e not yet exercised on this machine.
 
-Deferred: frontend UI; RabbitMQ/Postgres/MinIO infra (compose profiles later); PCB layout
-generation; LLM agent modes (hooks exist — deterministic mode needs zero API keys).
+Deferred: PCB layout generation via MCP routing tools; LLM agent modes (hooks exist —
+deterministic mode needs zero API keys); K8s manifests untested (no cluster here).
