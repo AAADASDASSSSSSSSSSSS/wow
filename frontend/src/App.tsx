@@ -275,7 +275,7 @@ function Hero({
           <div className="grid items-end gap-6 lg:grid-cols-12">
             <div className="lg:col-span-8">
               <h1
-                className="text-[26vw] font-medium leading-[0.85] tracking-[-0.07em] sm:text-[24vw] md:text-[22vw] lg:text-[20vw] xl:text-[19vw] 2xl:text-[20vw]"
+                className="text-[18vw] font-medium leading-[0.85] tracking-[-0.06em] sm:text-[17vw] md:text-[15vw] lg:text-[11.5vw] xl:text-[11.6vw] 2xl:text-[12vw]"
                 style={{ color: primaryText }}
               >
                 <WordsPullUp text="RatsNest" showAsterisk />
@@ -918,7 +918,11 @@ export default function App() {
       .catch((err) => {
         if (active) {
           setHealth("offline");
-          setHealthError(err instanceof Error ? err.message : "API offline");
+          setHealthError(
+            err instanceof Error && err.message.includes("Failed to fetch")
+              ? "control plane unavailable"
+              : "control plane unavailable"
+          );
         }
       });
 

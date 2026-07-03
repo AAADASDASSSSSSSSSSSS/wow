@@ -1,5 +1,6 @@
 .venv/
 node_modules/
+frontend/vite-dev*.log
 __pycache__/
 *.pyc
 *.tsbuildinfo
