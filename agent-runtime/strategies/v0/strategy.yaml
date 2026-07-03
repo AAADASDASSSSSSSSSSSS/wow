@@ -1,0 +1,54 @@
+name: baseline-v0
+scorecard_weights:
+  error: 30.0
+  warning: 3.0
+  info: 0.0
+  erc_fail: 15.0
+
+suppressions:
+  - rule_id: RS-001
+    reason: >-
+      +12V is an external supply input. A PWR_FLAG is present for KiCad's own
+      ERC; kicad-happy deliberately ignores PWR_FLAG connectivity, so RS-001
+      is expected on externally powered rails.
+  - rule_id: DS-002
+    reason: datasheet sync is not part of the offline benchmark environment
+
+repair_mappings:
+  - match_rule_id: RN-VOUT-001     # synthesized: feedback divider vs rail name
+    repair_type: feedback_divider
+    params: {keep: r_bottom, e_series: E24}
+  - match_rule_id: LR-001          # analyzer-native, ships fix_params
+    repair_type: led_resistor
+    params: {e_series: E24}
+  - match_rule_id: SS-001          # sourcing blocker -> fill MPNs
+    repair_type: fill_mpn
+    params: {}
+  - match_rule_id: DS-001          # no MPNs at all -> fill MPNs
+    repair_type: fill_mpn
+    params: {}
+
+solver_params:
+  # curated Vref table (evolvable; keys matched as substring of value/lib_id)
+  vref_table:
+    AP1117: 1.25
+    AMS1117: 1.25
+    LM317: 1.25
+    TLV431: 1.24
+  vout_tolerance_pct: 2.0
+  # curated part library slice for MPN fill, keyed by component Value
+  mpn_map:
+    AP1117-ADJ: AP1117E-ADJ
+    3k: RC0805FR-073KL
+    1k: RC0805FR-071KL
+    "330": RC0805FR-07330RL
+    LED_RED: LTST-C170KRKT
+
+prompts:
+  # used only in LLM mode (deterministic mode is the default)
+  synthesizer: >-
+    You are the review synthesizer. Merge analyzer findings, remove duplicates,
+    and rank by user impact. Never invent findings without analyzer evidence.
+  repair_planner: >-
+    You are the repair planner. Only propose ops for findings with a mapping
+    entry. Unmapped findings must be escalated, never improvised.
