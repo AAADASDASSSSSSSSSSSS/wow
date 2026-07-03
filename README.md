@@ -66,6 +66,32 @@ K8s starting manifests: `infra/k8s/ratsnest.yaml` (syntax-only validated — no 
 | `GET /api/runs/{id}/events` | ATDP trajectory events (streamed in live during the run) |
 | `POST /api/atdp/events` | ATDP ingest (used by the Python data proxy) |
 
+## Frontend dashboard
+
+The dashboard at `http://localhost:8080/` is built from `frontend/` with
+React, Vite, TypeScript, Tailwind CSS, framer-motion, and lucide-react.
+
+For local frontend development:
+
+```powershell
+cd RatsNest/frontend
+npm install
+npm run dev
+```
+
+The Vite dev server proxies `/api` to `http://localhost:8080`.
+
+To refresh the Spring Boot static assets:
+
+```powershell
+cd RatsNest/frontend
+npm run build
+```
+
+`npm run build` writes the compiled app to
+`backend/src/main/resources/static`, so the Spring Boot jar and Docker image
+serve the latest dashboard without changing the REST API.
+
 ## Configuration (env vars)
 
 | Var | Default | Meaning |
@@ -103,7 +129,7 @@ and KiCad 10 (its bundled python provides pcbnew; deps: `pip install sexpdata ki
 - AHE v1: benchmark w/ seeded-defect ground truth, candidate-vs-incumbent experiments,
   promotion gates (verified to promote a good candidate and reject a sabotaged one), rollback
 - Spring control plane: runs/designs REST API, ATDP trajectory store, dual dispatch (local subprocess / Kafka queue)
-- **Dashboard** at `http://localhost:8080/` — design form, runs, scorecards, repair rationale, ATDP timeline (zero-build static page; Vite/Vue can replace it without API changes)
+- **Dashboard** at `http://localhost:8080/` — React/Vite hybrid landing page plus live control console for design form, runs, scorecards, repair rationale, and ATDP timeline
 - **Cluster mode**: `docker compose -f RatsNest/infra/docker-compose.yml --profile cluster up` → Postgres 16 + Kafka (KRaft) + backend (cluster profile) + Python Kafka worker. Code-complete and compose-validated; full cluster e2e not yet exercised on this machine.
 
 Deferred: PCB layout generation via MCP routing tools; LLM agent modes (hooks exist —
