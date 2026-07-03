@@ -40,6 +40,27 @@ def _snap(config: Config, ideal: float, series: str) -> float:
     return float(snapped)
 
 
+def resistor_mpn(strategy: StrategyBundle, value_str: str) -> str:
+    """Curated MPN for a resistor value: explicit map first, else the
+    strategy's Yageo-style pattern (3k->3K, 1.6k->1K6, 330->330R)."""
+    mpn_map: dict = strategy.solver_params.get("mpn_map", {})
+    if value_str in mpn_map:
+        return str(mpn_map[value_str])
+    pattern = strategy.solver_params.get(
+        "resistor_mpn_pattern", "RC0805FR-07{code}L")
+    if value_str.endswith(("k", "M")):
+        suffix = value_str[-1].upper()
+        body = value_str[:-1]
+        if "." in body:
+            whole, frac = body.split(".")
+            code = f"{whole}{suffix}{frac}"
+        else:
+            code = f"{body}{suffix}"
+    else:
+        code = f"{value_str}R"
+    return pattern.format(code=code)
+
+
 # ---------------------------------------------------------------------------
 # Solvers — each returns list[RepairOp] (possibly empty) + explanation
 # ---------------------------------------------------------------------------
@@ -108,6 +129,8 @@ def _solve_fill_mpn(f: Finding, mapping: RepairMapping,
         # if this plan also changes the value, look up MPN for the NEW value
         value = planned_values.get(ref, comp.get("value", ""))
         mpn = mpn_map.get(value)
+        if not mpn and comp.get("type") == "resistor":
+            mpn = resistor_mpn(strategy, value)  # pattern fallback
         if not mpn:
             misses.append(f"{ref}({value})")
             continue

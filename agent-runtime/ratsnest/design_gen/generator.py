@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ratsnest.agents.repair_planner import format_ohms
+from ratsnest.agents.repair_planner import format_ohms, resistor_mpn as _resistor_mpn_impl
 from ratsnest.config import Config
 from ratsnest.design_gen.templates import build_regulator_board, rail_name
 from ratsnest.khlib import load_kh_module
@@ -66,43 +66,36 @@ def pick_divider(config: Config, target: float, vref: float,
 
 
 def _resistor_mpn(strategy: StrategyBundle, value_str: str) -> str:
-    mpn_map = strategy.solver_params.get("mpn_map", {})
-    if value_str in mpn_map:
-        return str(mpn_map[value_str])
-    pattern = strategy.solver_params.get(
-        "resistor_mpn_pattern", "RC0805FR-07{code}L")
-    # Yageo value code: 3k->3K, 1.6k->1K6, 330->330R, 8.2k->8K2
-    if value_str.endswith(("k", "M")):
-        suffix = value_str[-1].upper()
-        body = value_str[:-1]
-        if "." in body:
-            whole, frac = body.split(".")
-            code = f"{whole}{suffix}{frac}"
-        else:
-            code = f"{body}{suffix}"
-    else:
-        code = f"{value_str}R"
-    return pattern.format(code=code)
+    # single knowledge base shared with the repair loop (agents/repair_planner)
+    return _resistor_mpn_impl(strategy, value_str)
 
 
-def generate_project(spec: DesignSpec, out_dir: Path,
-                     strategy: StrategyBundle,
-                     config: Config | None = None) -> Path:
-    """Write <out_dir>/<project>.kicad_sch + .kicad_pro (+ designspec.json)."""
+def solve_board_values(spec: DesignSpec, strategy: StrategyBundle,
+                       config: Config | None = None,
+                       regulator_part: str = REGULATOR_PART,
+                       ) -> tuple[dict[str, str], dict[str, str], bool]:
+    """Solve all component values + MPNs for the regulator board family.
+
+    Shared by BOTH generation backends (template writer and the KiCAD MCP
+    executor), so the strategy's Vref table / E-series / MPN assets govern
+    every path a design can be created through.
+
+    Returns (values, mpns, include_led).
+    """
     config = config or Config.load()
     if spec.output_voltage >= spec.input_voltage:
         raise GenerationError(
             f"linear regulator needs Vin > Vout "
             f"(got {spec.input_voltage}V -> {spec.output_voltage}V)")
 
-    vref = _vref_for(strategy, REGULATOR_PART)
+    vref = _vref_for(strategy, regulator_part)
     tol = float(strategy.solver_params.get("vout_tolerance_pct", 2.0))
-    r_top, r_bot, achieved = pick_divider(config, spec.output_voltage, vref, tol)
+    r_top, r_bot, _achieved = pick_divider(config, spec.output_voltage, vref, tol)
     r1_str, r2_str = format_ohms(r_top), format_ohms(r_bot)
 
-    values = {"U1": REGULATOR_PART, "R1": r1_str, "R2": r2_str}
+    values = {"U1": regulator_part, "R1": r1_str, "R2": r2_str}
     mpn_map = strategy.solver_params.get("mpn_map", {})
-    mpns = {"U1": str(mpn_map.get(REGULATOR_PART, "")),
+    mpns = {"U1": str(mpn_map.get(regulator_part, "")),
             "R1": _resistor_mpn(strategy, r1_str),
             "R2": _resistor_mpn(strategy, r2_str)}
 
@@ -127,6 +120,15 @@ def generate_project(spec: DesignSpec, out_dir: Path,
         values.update({"R3": r3_str, "D1": f"LED_{color.upper()}"})
         mpns.update({"R3": _resistor_mpn(strategy, r3_str),
                      "D1": str(led_mpns.get(color, ""))})
+    return values, mpns, include_led
+
+
+def generate_project(spec: DesignSpec, out_dir: Path,
+                     strategy: StrategyBundle,
+                     config: Config | None = None) -> Path:
+    """Write <out_dir>/<project>.kicad_sch + .kicad_pro (+ designspec.json)."""
+    config = config or Config.load()
+    values, mpns, include_led = solve_board_values(spec, strategy, config)
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

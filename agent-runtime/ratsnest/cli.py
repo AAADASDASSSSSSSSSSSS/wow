@@ -93,8 +93,18 @@ def cmd_design(args) -> int:
     say(f"spec: {spec.input_voltage:g}V -> {spec.output_voltage:g}V, "
         f"LED={spec.led or 'none'}  project={spec.project_name}")
 
-    generate_project(spec, out_dir, strategy, config)
-    say(f"generated: {out_dir}")
+    if args.backend == "mcp":
+        from ratsnest.data_proxy import Recorder
+        from ratsnest.mcp_exec import KiCadMcpBackend
+        from ratsnest.orchestrator import RunStore
+        gen_recorder = Recorder(
+            RunStore(config.runs_dir).run_dir(f"gen_{spec.project_name}"),
+            f"gen_{spec.project_name}", config.control_plane_url)
+        KiCadMcpBackend(config, gen_recorder).generate(spec, out_dir, strategy)
+        say(f"generated via KiCAD MCP sub-agents: {out_dir}")
+    else:
+        generate_project(spec, out_dir, strategy, config)
+        say(f"generated: {out_dir}")
 
     record = None
     adapter = KicadHappyAdapter(config)
@@ -179,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
                        help="generate a KiCad project from a requirement, "
                             "review it, and write a report")
     p.add_argument("requirement", help='e.g. "12V to 3.3V board with green LED"')
+    p.add_argument("--backend", choices=["template", "mcp"], default="template",
+                   help="template: deterministic S-expression writer; "
+                        "mcp: sub-agents drive real KiCad via KiCAD-MCP-Server")
     p.add_argument("--out", default=None, help="output project directory")
     p.add_argument("--no-fix", action="store_true",
                    help="generate + evaluate only, skip the repair loop")

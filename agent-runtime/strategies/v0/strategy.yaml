@@ -39,6 +39,7 @@ solver_params:
   # curated part library slice for MPN fill, keyed by component Value
   mpn_map:
     AP1117-ADJ: AP1117E-ADJ
+    LM317: LM317T
     3k: RC0805FR-073KL
     1k: RC0805FR-071KL
     "330": RC0805FR-07330RL
