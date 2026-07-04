@@ -65,7 +65,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ServiceTokenFilter serviceTokenFilter,
-                                           RateLimitFilter rateLimitFilter)
+                                           RateLimitFilter rateLimitFilter,
+                                           CookieBearerFilter cookieBearerFilter)
             throws Exception {
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(
@@ -74,8 +75,15 @@ public class SecurityConfig {
             .addFilterBefore(serviceTokenFilter, BasicAuthenticationFilter.class);
 
         if ("jwt".equalsIgnoreCase(mode)) {
+            // MUST precede BearerTokenAuthenticationFilter (which sits BEFORE
+            // the BasicAuthenticationFilter anchor in Security 6) so the
+            // cookie->Authorization wrapper is visible to token resolution
+            http.addFilterBefore(cookieBearerFilter,
+                    org.springframework.security.oauth2.server.resource.web
+                            .authentication.BearerTokenAuthenticationFilter.class);
             http.authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/", "/index.html", "/assets/**",
+                    .requestMatchers("/", "/index.html", "/login.html",
+                            "/assets/**",
                             "/favicon.ico", "/api/health", "/api/auth/**",
                             "/actuator/health", "/v3/api-docs/**",
                             "/swagger-ui/**", "/swagger-ui.html")

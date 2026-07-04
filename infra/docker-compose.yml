@@ -85,13 +85,21 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # >=2 partitions so scaled workers actually share the run queue
+      KAFKA_NUM_PARTITIONS: 4
     ports:
       - "9094:9094"
+
+  redis:
+    image: redis:7-alpine
+    profiles: [cluster]
+    ports:
+      - "6379:6379"
 
   backend-cluster:
     image: ratsnest-backend
     profiles: [cluster]
-    depends_on: [postgres, kafka]
+    depends_on: [postgres, kafka, redis]
     ports:
       - "8080:8080"
     environment:
@@ -99,6 +107,9 @@ services:
       RATSNEST_DB_URL: jdbc:postgresql://postgres:5432/ratsnest
       RATSNEST_KAFKA: kafka:9092
       RATSNEST_SELF_URL: http://backend-cluster:8080
+      RATSNEST_RATELIMIT_MODE: redis
+      RATSNEST_REDIS_HOST: redis
+      RATSNEST_RATE_PER_SECOND: ${RATSNEST_RATE_PER_SECOND:-25}
       # override BOTH in production (docker compose --env-file or secrets)
       RATSNEST_JWT_SECRET: ${RATSNEST_JWT_SECRET:-cluster-demo-secret-0123456789abcdef00}
       RATSNEST_SERVICE_TOKEN: ${RATSNEST_SERVICE_TOKEN:-cluster-demo-service-token}

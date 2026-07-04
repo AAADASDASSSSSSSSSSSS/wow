@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RatsNest — Sign in</title>
+<style>
+  body { margin:0; min-height:100vh; display:grid; place-items:center;
+         background:#0f1420; color:#dce3f2; font:15px/1.5 "Segoe UI",system-ui,sans-serif; }
+  .card { width:340px; background:#171e2e; border:1px solid #2a3550;
+          border-radius:12px; padding:28px; }
+  h1 { margin:0 0 4px; font-size:20px; }
+  p  { margin:0 0 18px; color:#8593ad; font-size:13px; }
+  input, button { width:100%; box-sizing:border-box; padding:10px 12px; margin-bottom:10px;
+          background:#0d1220; color:#dce3f2; border:1px solid #2a3550;
+          border-radius:7px; font:inherit; }
+  button { background:#5b8cff; border:0; color:#fff; font-weight:600; cursor:pointer; }
+  button.alt { background:transparent; border:1px solid #2a3550; color:#8593ad; }
+  #msg { min-height:20px; font-size:13px; margin-bottom:6px; }
+  #msg.err { color:#ff6b6b; } #msg.ok { color:#3ecf8e; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🐀 RatsNest</h1>
+  <p>Sign in to the AHE control plane</p>
+  <input id="u" placeholder="username" autocomplete="username">
+  <input id="p" type="password" placeholder="password (min 8 chars)"
+         autocomplete="current-password">
+  <div id="msg"></div>
+  <button onclick="go('login')">Sign in</button>
+  <button class="alt" onclick="go('register')">Create account</button>
+</div>
+<script>
+async function go(action) {
+  const msg = document.getElementById('msg');
+  msg.className = ''; msg.textContent = '...';
+  const body = JSON.stringify({ username: u.value.trim(), password: p.value });
+  try {
+    const r = await fetch('/api/auth/' + action, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body });
+    const data = await r.json();
+    if (!r.ok) { msg.className='err';
+      msg.textContent = data.detail || data.error || ('failed (' + r.status + ')'); return; }
+    if (action === 'register') { msg.className='ok';
+      msg.textContent = 'account created (' + data.role + ') — now sign in'; return; }
+    msg.className='ok'; msg.textContent = 'welcome, ' + data.username;
+    setTimeout(() => location.href = '/', 400);   // cookie is set — SPA just works
+  } catch (e) { msg.className='err'; msg.textContent = 'network error'; }
+}
+p.addEventListener('keydown', e => { if (e.key === 'Enter') go('login'); });
+</script>
+</body>
+</html>

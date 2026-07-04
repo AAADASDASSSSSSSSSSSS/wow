@@ -58,8 +58,36 @@ public class AuthController {
                     .body(Map.of("error", "invalid credentials"));
         }
         String token = jwtService.issue(user.getUsername(), user.getRole());
-        return ResponseEntity.ok(Map.of(
-                "token", token, "tokenType", "Bearer",
-                "username", user.getUsername(), "role", user.getRole()));
+        // HttpOnly cookie so the SPA works in jwt mode without code changes
+        var cookie = org.springframework.http.ResponseCookie
+                .from(dev.ratsnest.security.CookieBearerFilter.COOKIE, token)
+                .httpOnly(true).sameSite("Lax").path("/")
+                .maxAge(java.time.Duration.ofHours(24)).build();
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.SET_COOKIE,
+                        cookie.toString())
+                .body(Map.of("token", token, "tokenType", "Bearer",
+                        "username", user.getUsername(), "role", user.getRole()));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout() {
+        var cookie = org.springframework.http.ResponseCookie
+                .from(dev.ratsnest.security.CookieBearerFilter.COOKIE, "")
+                .httpOnly(true).sameSite("Lax").path("/").maxAge(0).build();
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.SET_COOKIE,
+                        cookie.toString())
+                .body(Map.of("status", "logged out"));
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/me")
+    public ResponseEntity<Map<String, String>> me(
+            org.springframework.security.core.Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "not authenticated"));
+        }
+        return ResponseEntity.ok(Map.of("username", auth.getName()));
     }
 }
