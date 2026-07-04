@@ -33,15 +33,30 @@ def handle_request(msg: dict, config: Config) -> None:
     if msg.get("controlPlaneUrl"):
         config.control_plane_url = msg["controlPlaneUrl"]
 
+    spec = None
+    strategy = None
     if kind == "design":
-        from ratsnest.design_gen import generate_project, parse_requirement
         from ratsnest.evolution import StrategyRegistry
-        spec = parse_requirement(msg.get("requirement", ""))
+        from ratsnest.pipeline import generate_for_backend
         _, strategy = StrategyRegistry(config.strategies_dir).load_active()
-        generate_project(spec, Path(project_dir), strategy, config)
+        spec = generate_for_backend(
+            msg.get("requirement", ""), Path(project_dir),
+            msg.get("backend", "template"), strategy, config)
 
     record = RunLoop(config).execute(RunConfig(
         project_dir=project_dir, max_iterations=max_iter, run_erc=False))
+
+    # deliverables so the control plane can serve download + previews
+    if kind == "design":
+        try:
+            from ratsnest.agents import synthesize
+            from ratsnest.kh_adapter import KicadHappyAdapter
+            from ratsnest.pipeline import finalize_outputs
+            ev = synthesize(KicadHappyAdapter(config).analyze_all(
+                Path(project_dir)), strategy, project_dir)
+            finalize_outputs(Path(project_dir), ev, record, spec, config)
+        except Exception as exc:
+            print(f"[worker] finalize failed: {exc}", flush=True)
 
     callback = msg.get("callbackUrl")
     if callback:

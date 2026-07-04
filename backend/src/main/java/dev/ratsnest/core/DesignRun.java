@@ -19,6 +19,8 @@ public class DesignRun {
     private String id;
 
     private String kind;            // "fix" | "design"
+    private String backend;         // "template" | "crew" | "mcp" (design runs)
+    private String owner;           // username that created the run (from JWT)
     private String requirement;     // natural-language requirement (design runs)
     private String projectDir;
     private int maxIterations;
@@ -46,10 +48,11 @@ public class DesignRun {
     }
 
     public static DesignRun createDesign(String requirement, String projectDir,
-                                         int maxIterations) {
+                                         int maxIterations, String backend) {
         DesignRun run = create(projectDir, maxIterations);
         run.kind = "design";
         run.requirement = requirement;
+        run.backend = backend;
         return run;
     }
 
@@ -57,6 +60,10 @@ public class DesignRun {
     public void setId(String id) { this.id = id; }
     public String getKind() { return kind; }
     public void setKind(String kind) { this.kind = kind; }
+    public String getBackend() { return backend; }
+    public void setBackend(String backend) { this.backend = backend; }
+    public String getOwner() { return owner; }
+    public void setOwner(String owner) { this.owner = owner; }
     public String getRequirement() { return requirement; }
     public void setRequirement(String requirement) { this.requirement = requirement; }
     public String getProjectDir() { return projectDir; }

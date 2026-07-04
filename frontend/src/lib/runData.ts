@@ -1,17 +1,30 @@
+export type DesignBackend = "template" | "crew" | "mcp";
+
 export interface HealthResponse {
   service: string;
   status: string;
 }
 
+export interface AuthResult {
+  token?: string;
+  tokenType?: string;
+  username?: string;
+  role?: string;
+  error?: string;
+}
+
 export interface CreateRunResponse {
   runId: string;
   status: string;
+  backend?: string;
   projectDir?: string;
 }
 
 export interface DesignRun {
   id: string;
   kind?: string | null;
+  backend?: string | null;
+  owner?: string | null;
   status: string;
   projectDir?: string | null;
   requirement?: string | null;

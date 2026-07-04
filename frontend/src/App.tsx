@@ -13,22 +13,34 @@ import {
   Check,
   CircuitBoard,
   Cpu,
+  Download,
   FlaskConical,
   GitBranch,
+  Image as ImageIcon,
+  LogIn,
+  LogOut,
   RadioTower,
   Sparkles,
+  User,
   Zap
 } from "lucide-react";
 import {
   createDesignRun,
   createRepairRun,
+  downloadUrl,
   getHealth,
+  getMe,
   getRun,
   getRunEvents,
-  listRuns
+  listRuns,
+  login,
+  logout,
+  previewUrl,
+  register
 } from "./lib/api";
 import {
   AtdpEvent,
+  DesignBackend,
   DesignRun,
   formatDate,
   formatScoreDelta,
@@ -448,6 +460,7 @@ function ConsoleSection() {
   const [selectedRun, setSelectedRun] = useState<DesignRun | null>(null);
   const [events, setEvents] = useState<AtdpEvent[]>([]);
   const [requirement, setRequirement] = useState("");
+  const [backend, setBackend] = useState<DesignBackend>("template");
   const [projectDir, setProjectDir] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmittingDesign, setIsSubmittingDesign] = useState(false);
@@ -533,7 +546,7 @@ function ConsoleSection() {
 
     setIsSubmittingDesign(true);
     try {
-      const response = await createDesignRun(trimmed);
+      const response = await createDesignRun(trimmed, backend);
       setSelectedRunId(response.runId);
       setRequirement("");
       await refreshRuns();
@@ -611,6 +624,40 @@ function ConsoleSection() {
                 placeholder="a 12V to 3.3V power board with a green LED"
                 value={requirement}
               />
+              <div className="mt-3">
+                <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
+                  Design backend
+                </p>
+                <div className="grid grid-cols-3 gap-1 rounded-full border border-white/10 bg-black/50 p-1">
+                  {(
+                    [
+                      { id: "template", label: "Template" },
+                      { id: "crew", label: "Crew" },
+                      { id: "mcp", label: "MCP" }
+                    ] as { id: DesignBackend; label: string }[]
+                  ).map((option) => (
+                    <button
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                        backend === option.id
+                          ? "bg-primary text-black"
+                          : "text-gray-400 hover:text-primary"
+                      }`}
+                      key={option.id}
+                      onClick={() => setBackend(option.id)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
+                  {backend === "template"
+                    ? "Deterministic S-expression writer. Fast, schematic-only."
+                    : backend === "crew"
+                      ? "In-process agent crew drives real KiCad libraries — schematic + routed board."
+                      : "KiCAD-MCP-Server sub-agents over the MCP stdio transport."}
+                </p>
+              </div>
               <button
                 className="group mt-3 inline-flex w-full items-center justify-between rounded-full bg-primary px-4 py-2 text-sm font-bold text-black disabled:cursor-wait disabled:opacity-60"
                 disabled={isSubmittingDesign}
@@ -674,8 +721,13 @@ function ConsoleSection() {
                       type="button"
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-[#E1E0CC]">
+                        <span className="flex items-center gap-2 text-sm text-[#E1E0CC]">
                           {run.kind ?? "fix"} / {shortId(run.id)}
+                          {run.backend ? (
+                            <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                              {run.backend}
+                            </span>
+                          ) : null}
                         </span>
                         <StatusBadge status={run.status} />
                       </div>
@@ -711,6 +763,57 @@ function StatusBadge({ status }: { status?: string | null }) {
     >
       {status ?? "unknown"}
     </span>
+  );
+}
+
+function isTerminal(status?: string | null): boolean {
+  return (
+    status === "converged" ||
+    status === "escalated" ||
+    status === "suggested" ||
+    status === "failed"
+  );
+}
+
+function PreviewImage({ runId, which }: { runId: string; which: "sch" | "pcb" }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) {
+    return null;
+  }
+  return (
+    <div className="overflow-hidden rounded-md border border-white/10 bg-white">
+      <div className="border-b border-black/10 bg-black/5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-black/60">
+        {which === "sch" ? "Schematic" : "PCB"}
+      </div>
+      <img
+        alt={`${which} preview`}
+        className="max-h-[420px] w-full object-contain p-2"
+        onError={() => setOk(false)}
+        src={previewUrl(runId, which)}
+      />
+    </div>
+  );
+}
+
+function PreviewPanel({ runId }: { runId: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#101010] p-5">
+      <div className="flex items-center gap-2 text-primary">
+        <ImageIcon size={16} />
+        <h3 className="text-sm uppercase tracking-[0.25em]">
+          Read-only preview
+        </h3>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <PreviewImage runId={runId} which="sch" />
+        <PreviewImage runId={runId} which="pcb" />
+      </div>
+      <p className="mt-3 text-[11px] text-gray-500">
+        Rendered headless from the generated KiCad files. Missing panels mean
+        that layer was not produced (e.g. template backend is schematic-only)
+        or kicad-cli is unavailable on the worker.
+      </p>
+    </div>
   );
 }
 
@@ -766,11 +869,28 @@ function RunDetail({
             {run.requirement ? `requirement: ${run.requirement}` : `project: ${run.projectDir ?? "-"}`}
           </p>
           <p className="break-all">
+            backend: {run.backend ?? "-"}
+            {run.owner ? ` / owner: ${run.owner}` : ""}
+          </p>
+          <p className="break-all">
             strategy: {run.strategyVersionId ?? "-"} / python run:{" "}
             {run.pythonRunId ?? "-"}
           </p>
         </div>
+        {isTerminal(run.status) ? (
+          <a
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition hover:bg-primary/20"
+            href={downloadUrl(run.id)}
+          >
+            <Download size={15} />
+            Download KiCad project (.zip)
+          </a>
+        ) : null}
       </div>
+
+      {run.kind === "design" && isTerminal(run.status) ? (
+        <PreviewPanel runId={run.id} />
+      ) : null}
 
       <div className="rounded-lg border border-white/10 bg-[#101010] p-5">
         <h3 className="text-sm uppercase tracking-[0.25em] text-primary">
@@ -902,9 +1022,131 @@ function Metric({ label, value }: { label: string; value: number | string }) {
   );
 }
 
+function AuthBar({
+  user,
+  onChange
+}: {
+  user: string | null;
+  onChange: (user: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (mode === "register") {
+        const result = await register(username.trim(), password);
+        setMessage(`account created (${result.role}) — now sign in`);
+        setMode("login");
+      } else {
+        const result = await login(username.trim(), password);
+        onChange(result.username ?? username.trim());
+        setOpen(false);
+        setPassword("");
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "auth failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signOut() {
+    await logout();
+    onChange(null);
+  }
+
+  return (
+    <div className="fixed right-4 top-4 z-50">
+      {user ? (
+        <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[#101010]/90 px-3 py-1.5 text-xs text-gray-300 backdrop-blur">
+          <User size={14} className="text-primary" />
+          <span className="max-w-[120px] truncate">{user}</span>
+          <button
+            className="ml-1 inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-gray-400 transition hover:text-primary"
+            onClick={signOut}
+            type="button"
+          >
+            <LogOut size={13} /> Sign out
+          </button>
+        </div>
+      ) : (
+        <button
+          className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary backdrop-blur transition hover:bg-primary/20"
+          onClick={() => setOpen((value) => !value)}
+          type="button"
+        >
+          <LogIn size={14} /> Sign in
+        </button>
+      )}
+
+      {open && !user ? (
+        <form
+          className="mt-2 w-72 rounded-lg border border-white/10 bg-[#101010] p-4 shadow-2xl"
+          onSubmit={submit}
+        >
+          <div className="mb-3 grid grid-cols-2 gap-1 rounded-full border border-white/10 bg-black/50 p-1 text-xs font-bold">
+            {(["login", "register"] as const).map((m) => (
+              <button
+                className={`rounded-full px-3 py-1.5 transition ${
+                  mode === m ? "bg-primary text-black" : "text-gray-400"
+                }`}
+                key={m}
+                onClick={() => setMode(m)}
+                type="button"
+              >
+                {m === "login" ? "Sign in" : "Register"}
+              </button>
+            ))}
+          </div>
+          <input
+            autoComplete="username"
+            className="mb-2 w-full rounded-md border border-white/10 bg-black/60 px-3 py-2 text-sm text-primary outline-none focus:border-primary/45"
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="username"
+            value={username}
+          />
+          <input
+            autoComplete="current-password"
+            className="mb-2 w-full rounded-md border border-white/10 bg-black/60 px-3 py-2 text-sm text-primary outline-none focus:border-primary/45"
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="password (min 8 chars)"
+            type="password"
+            value={password}
+          />
+          {message ? (
+            <p className="mb-2 text-[11px] text-amber-200">{message}</p>
+          ) : null}
+          <button
+            className="w-full rounded-full bg-primary px-4 py-2 text-sm font-bold text-black disabled:opacity-60"
+            disabled={busy}
+            type="submit"
+          >
+            {busy ? "..." : mode === "login" ? "Sign in" : "Create account"}
+          </button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
 export default function App() {
   const [health, setHealth] = useState("checking");
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [user, setUser] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMe()
+      .then((result) => setUser(result.username ?? null))
+      .catch(() => setUser(null));
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -933,6 +1175,7 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-black text-[#E1E0CC]">
+      <AuthBar user={user} onChange={setUser} />
       <Hero health={health} healthError={healthError} />
       <SystemSection />
       <FeaturesSection />

@@ -89,10 +89,31 @@ public class SecurityConfig {
                             "/swagger-ui/**", "/swagger-ui.html")
                     .permitAll()
                     .anyRequest().authenticated())
-                .oauth2ResourceServer(o -> o.jwt(jwt -> {}));
+                .oauth2ResourceServer(o -> o.jwt(jwt ->
+                        jwt.jwtAuthenticationConverter(roleConverter())));
         } else {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         }
         return http.build();
+    }
+
+    /** Map the JWT `role` claim onto a Spring authority (ROLE_ADMIN / ROLE_USER)
+     *  so @PreAuthorize and ownership checks can see roles. */
+    private static org.springframework.core.convert.converter.Converter<
+            org.springframework.security.oauth2.jwt.Jwt,
+            org.springframework.security.authentication.AbstractAuthenticationToken>
+            roleConverter() {
+        var converter = new org.springframework.security.oauth2.server.resource
+                .authentication.JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            String role = jwt.getClaimAsString("role");
+            if (role == null || role.isBlank()) {
+                return java.util.List.of();
+            }
+            return java.util.List.of(
+                    new org.springframework.security.core.authority
+                            .SimpleGrantedAuthority("ROLE_" + role));
+        });
+        return converter;
     }
 }

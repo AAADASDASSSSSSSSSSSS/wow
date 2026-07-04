@@ -79,6 +79,7 @@ public class RunDispatchService {
             msg.put("requirement", run.getRequirement());
             msg.put("projectDir", run.getProjectDir());
             msg.put("maxIterations", run.getMaxIterations());
+            msg.put("backend", run.getBackend());
             msg.put("callbackUrl", selfUrl + "/api/runs/" + run.getId() + "/result");
             msg.put("controlPlaneUrl", selfUrl);
             template.send(runRequestTopic, run.getId(), msg.toString());
@@ -98,6 +99,9 @@ public class RunDispatchService {
             if ("design".equals(run.getKind())) {
                 cmd.addAll(List.of(pythonExe, "-m", "ratsnest", "design",
                         run.getRequirement(), "--out", run.getProjectDir()));
+                String backend = run.getBackend() == null ? "template"
+                        : run.getBackend();
+                cmd.addAll(List.of("--backend", backend));
             } else {
                 cmd.addAll(List.of(pythonExe, "-m", "ratsnest", "fix",
                         run.getProjectDir()));
