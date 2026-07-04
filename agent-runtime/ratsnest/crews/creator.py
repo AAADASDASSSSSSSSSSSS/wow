@@ -92,6 +92,12 @@ class WiringAgent(KiCadSkillAgent):
     commands = ("add_schematic_net_label", "connect_to_net", "add_schematic_wire")
 
 
+class LayoutAgent(KiCadSkillAgent):
+    name = "layout_agent"
+    commands = ("set_board_size", "add_board_outline", "place_component",
+                "suggest_placement")
+
+
 class CreatorCrew:
     def __init__(self, config: Config | None = None,
                  recorder: Recorder | None = None, iteration: int = 0):
@@ -100,6 +106,7 @@ class CreatorCrew:
         self.project = ProjectAgent(self.config, **common)
         self.symbols = SymbolAgent(self.config, **common)
         self.wiring = WiringAgent(self.config, **common)
+        self.layout = LayoutAgent(self.config, **common)
 
     def generate(self, spec: DesignSpec, out_dir: Path,
                  strategy: StrategyBundle) -> Path:
@@ -125,13 +132,15 @@ class CreatorCrew:
         if include_led:
             placements += [("R3", "Device:R", values["R3"], 155, 55),
                            ("D1", "Device:LED", values["D1"], 155, 80)]
+        footprint_map: dict = strategy.solver_params.get("footprint_map", {})
         for ref, symbol, value, x, y in placements:
             library, sym_type = symbol.split(":")
             self.symbols.call("add_schematic_component", {
                 "schematicPath": str(sch),
                 "component": {"library": library, "type": sym_type,
                               "reference": ref, "value": value,
-                              "footprint": "", "x": x, "y": y,
+                              "footprint": str(footprint_map.get(symbol, "")),
+                              "x": x, "y": y,
                               "unit": 1, "angle": 0, "mirrorY": False},
             })
 
@@ -147,6 +156,18 @@ class CreatorCrew:
                 "schematicPath": str(sch), "netName": net,
                 "componentRef": ref, "pinNumber": pin,
             })
+
+        # layout agent: board outline so the PCB side has real geometry
+        outline: dict = strategy.solver_params.get(
+            "board_outline", {"width": 50, "height": 35})
+        try:
+            self.layout.call("set_board_size", {
+                "width": float(outline.get("width", 50)),
+                "height": float(outline.get("height", 35)),
+                "unit": "mm",
+            })
+        except AgentError:
+            pass  # board geometry is best-effort in gen v1
 
         self.project.call("save_project", {"force": True})
         self.project.call("close_project", {"save": False})

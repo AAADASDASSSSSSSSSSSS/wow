@@ -64,6 +64,62 @@ class PcbAnalyst(Agent):
         return AnalyzerOutput.model_validate(raw)
 
 
+class DependentAnalyst(Agent):
+    """Second-tier analysts (cross/thermal): consume the schematic + PCB
+    analysis envelopes through the analyzers' designed CLI contract
+    (--schematic/--pcb/--output JSON files)."""
+
+    crew = "checker"
+    script = ""  # e.g. "cross_analysis.py"
+
+    def __init__(self, config: Config, **kw):
+        super().__init__(**kw)
+        self.config = config
+
+    def analyze_from(self, schematic: AnalyzerOutput,
+                     pcb: AnalyzerOutput) -> AnalyzerOutput | None:
+        import json
+        import subprocess
+        import sys
+        import tempfile
+        script = self.config.kicad_scripts / self.script
+
+        def run() -> dict:
+            with tempfile.TemporaryDirectory() as td:
+                td_path = Path(td)
+                sch_json = td_path / "sch.json"
+                pcb_json = td_path / "pcb.json"
+                out_json = td_path / "out.json"
+                sch_json.write_text(schematic.model_dump_json(), encoding="utf-8")
+                pcb_json.write_text(pcb.model_dump_json(), encoding="utf-8")
+                proc = subprocess.run(
+                    [sys.executable, str(script), "--schematic", str(sch_json),
+                     "--pcb", str(pcb_json), "--output", str(out_json)],
+                    capture_output=True, text=True, timeout=180,
+                    stdin=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                if proc.returncode != 0 or not out_json.exists():
+                    raise RuntimeError(proc.stderr.strip()[:200])
+                return json.loads(out_json.read_text(encoding="utf-8"))
+
+        try:
+            raw = self.act(self.script.replace(".py", ""), run,
+                           action_detail={"module": f"kicad-happy/{self.script}"})
+        except Exception:
+            return None  # dependent analysis is best-effort
+        return AnalyzerOutput.model_validate(raw)
+
+
+class CrossAnalyst(DependentAnalyst):
+    name = "cross_analyst"
+    script = "cross_analysis.py"
+
+
+class ThermalAnalyst(DependentAnalyst):
+    name = "thermal_analyst"
+    script = "analyze_thermal.py"
+
+
 class CheckerCrew:
     """Fan-out over analyst agents; roster is strategy-governed."""
 
@@ -71,16 +127,20 @@ class CheckerCrew:
                  strategy: StrategyBundle | None = None,
                  recorder: Recorder | None = None, iteration: int = 0):
         self.config = config or Config.load()
-        analysts_cfg = (strategy.solver_params.get("analysts", {})
-                        if strategy else {})
-        common = dict(recorder=recorder, iteration=iteration)
+        self.cfg = (strategy.solver_params.get("analysts", {})
+                    if strategy else {})
+        common = dict(recorder=recorder, iteration=iteration,
+                      strategy_slice=self.cfg)
         self.agents: list = []
-        if analysts_cfg.get("schematic", True):
-            self.agents.append(SchematicAnalyst(
-                self.config, strategy_slice=analysts_cfg, **common))
-        if analysts_cfg.get("pcb", True):
-            self.agents.append(PcbAnalyst(
-                self.config, strategy_slice=analysts_cfg, **common))
+        if self.cfg.get("schematic", True):
+            self.agents.append(SchematicAnalyst(self.config, **common))
+        if self.cfg.get("pcb", True):
+            self.agents.append(PcbAnalyst(self.config, **common))
+        self.dependents: list[DependentAnalyst] = []
+        if self.cfg.get("cross", True):
+            self.dependents.append(CrossAnalyst(self.config, **common))
+        if self.cfg.get("thermal", True):
+            self.dependents.append(ThermalAnalyst(self.config, **common))
 
     def evaluate(self, project_dir: Path) -> dict[str, AnalyzerOutput]:
         outputs: dict[str, AnalyzerOutput] = {}
@@ -89,4 +149,10 @@ class CheckerCrew:
             if result is not None:
                 key = result.analyzer_type or agent.name
                 outputs[key] = result
+        sch, pcb = outputs.get("schematic"), outputs.get("pcb")
+        if sch is not None and pcb is not None and pcb.findings is not None:
+            for agent in self.dependents:
+                result = agent.analyze_from(sch, pcb)
+                if result is not None:
+                    outputs[result.analyzer_type or agent.name] = result
         return outputs
