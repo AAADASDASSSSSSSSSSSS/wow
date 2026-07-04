@@ -124,11 +124,20 @@ def cmd_design(args) -> int:
         say(f"loop: {record.status} in {len(record.iterations)} iteration(s)")
 
     report_path = write_report(out_dir / "ratsnest_report.md", ev, record, spec)
+
+    # end-of-process deliverable: one release archive with the complete
+    # KiCad project (sch + pcb + pro + fp-lib-table) and the design report
+    import shutil
+    release = Path(shutil.make_archive(
+        str(out_dir.parent / f"{spec.project_name}_release"), "zip", out_dir))
+
     if quiet and record is not None:
         # machine mode for control-plane dispatch: same RunRecord contract as `fix`
         print(record.model_dump_json(indent=2))
         return 0
     say(f"report: {report_path}")
+    say(f"kicad project: {out_dir}")
+    say(f"release package: {release}")
     _print_scorecard(ev.scorecard, ev.findings)
     return 0 if ev.scorecard.severity_counts.get("error", 0) == 0 else 1
 

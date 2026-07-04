@@ -31,7 +31,18 @@ def no_divider_repair(incumbent: StrategyBundle) -> StrategyBundle:
     return c
 
 
+def enable_emc(incumbent: StrategyBundle) -> StrategyBundle:
+    """Turn on the EMC analyst agent (checker crew roster is strategy-owned)."""
+    c = incumbent.model_copy(deep=True)
+    c.name = "candidate-enable-emc"
+    analysts = dict(c.solver_params.get("analysts", {}))
+    analysts["emc"] = True
+    c.solver_params["analysts"] = analysts
+    return c
+
+
 GENERATORS = {
     "expanded-vref": expanded_vref,
     "no-divider-repair": no_divider_repair,
+    "enable-emc": enable_emc,
 }

@@ -41,6 +41,21 @@ def render_report(
         "",
     ]
 
+    pcb_files = sorted(Path(evaluation.project_dir).glob("*.kicad_pcb")) \
+        if evaluation.project_dir else []
+    if pcb_files:
+        board_text = pcb_files[0].read_text(encoding="utf-8", errors="replace")
+        lines += [
+            "## Board",
+            "",
+            f"| footprints | routed segments | outline |",
+            f"|---|---|---|",
+            f"| {board_text.count('(footprint')} "
+            f"| {board_text.count('(segment')} "
+            f"| {'yes' if 'Edge.Cuts' in board_text else 'no'} |",
+            "",
+        ]
+
     actionable = [f for f in evaluation.findings if f.severity in ("error", "warning")]
     lines += ["## Findings", ""]
     if actionable:
