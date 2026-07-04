@@ -45,8 +45,12 @@ def handle_request(msg: dict, config: Config) -> None:
 
     callback = msg.get("callbackUrl")
     if callback:
+        headers = {"Content-Type": "application/json"}
+        token = os.environ.get("RATSNEST_SERVICE_TOKEN")
+        if token:
+            headers["X-RatsNest-Service-Token"] = token
         httpx.put(callback, content=record.model_dump_json(),
-                  headers={"Content-Type": "application/json"}, timeout=30)
+                  headers=headers, timeout=30)
     print(f"[worker] run {msg.get('runId')} -> {record.status}", flush=True)
 
 

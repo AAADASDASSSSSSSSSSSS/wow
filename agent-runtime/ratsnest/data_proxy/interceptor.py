@@ -76,7 +76,13 @@ class Recorder:
         if not (self.control_plane_url and httpx):
             return
         try:
+            import os
+            headers = {}
+            token = os.environ.get("RATSNEST_SERVICE_TOKEN")
+            if token:  # jwt-mode control plane: service-to-service auth
+                headers["X-RatsNest-Service-Token"] = token
             httpx.post(f"{self.control_plane_url.rstrip('/')}/api/atdp/events",
-                       json=json.loads(event.model_dump_json()), timeout=2.0)
+                       json=json.loads(event.model_dump_json()),
+                       headers=headers, timeout=2.0)
         except Exception:
             pass  # capture must never break the run

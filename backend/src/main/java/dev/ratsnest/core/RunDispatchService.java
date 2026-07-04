@@ -50,6 +50,9 @@ public class RunDispatchService {
     @Value("${ratsnest.self-url:http://localhost:8080}")
     private String selfUrl;
 
+    @Value("${ratsnest.security.service-token:}")
+    private String serviceToken;
+
     public RunDispatchService(DesignRunRepository runs,
                               ObjectProvider<KafkaTemplate<String, String>> kafka) {
         this.runs = runs;
@@ -105,6 +108,9 @@ public class RunDispatchService {
                     .directory(new File(agentRuntimeDir))
                     .redirectErrorStream(false);
             pb.environment().put("RATSNEST_CONTROL_PLANE_URL", selfUrl);
+            if (serviceToken != null && !serviceToken.isBlank()) {
+                pb.environment().put("RATSNEST_SERVICE_TOKEN", serviceToken);
+            }
 
             run.setStatus("running");
             runs.save(run);

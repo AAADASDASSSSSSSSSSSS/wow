@@ -20,8 +20,15 @@ import java.util.Map;
 @RequestMapping("/api")
 public class RunController {
 
-    public record CreateRunRequest(String projectDir, Integer maxIterations) {}
-    public record CreateDesignRequest(String requirement, Integer maxIterations) {}
+    public record CreateRunRequest(
+            @jakarta.validation.constraints.NotBlank String projectDir,
+            @jakarta.validation.constraints.Min(1)
+            @jakarta.validation.constraints.Max(10) Integer maxIterations) {}
+    public record CreateDesignRequest(
+            @jakarta.validation.constraints.NotBlank
+            @jakarta.validation.constraints.Size(max = 500) String requirement,
+            @jakarta.validation.constraints.Min(1)
+            @jakarta.validation.constraints.Max(10) Integer maxIterations) {}
 
     private final DesignRunRepository runs;
     private final RunDispatchService dispatch;
@@ -32,11 +39,8 @@ public class RunController {
     }
 
     @PostMapping("/runs")
-    public ResponseEntity<Map<String, String>> create(@RequestBody CreateRunRequest req) {
-        if (req.projectDir() == null || req.projectDir().isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "projectDir is required"));
-        }
+    public ResponseEntity<Map<String, String>> create(
+            @jakarta.validation.Valid @RequestBody CreateRunRequest req) {
         int maxIter = req.maxIterations() == null ? 4 : req.maxIterations();
         DesignRun run = DesignRun.create(req.projectDir(), maxIter);
         runs.save(run);
@@ -48,11 +52,7 @@ public class RunController {
     /** Design generation: natural-language requirement in, verified board out. */
     @PostMapping("/designs")
     public ResponseEntity<Map<String, String>> createDesign(
-            @RequestBody CreateDesignRequest req) {
-        if (req.requirement() == null || req.requirement().isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "requirement is required"));
-        }
+            @jakarta.validation.Valid @RequestBody CreateDesignRequest req) {
         int maxIter = req.maxIterations() == null ? 4 : req.maxIterations();
         String projectDir = System.getProperty("java.io.tmpdir")
                 + "/ratsnest-designs/" + java.util.UUID.randomUUID();
@@ -80,9 +80,17 @@ public class RunController {
         }).orElse(ResponseEntity.notFound().build());
     }
 
+    /** Bounded list, newest first (frontend-compatible array shape). */
     @GetMapping("/runs")
-    public List<DesignRun> list() {
-        return runs.findAll();
+    public List<DesignRun> list(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int page,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int size) {
+        return runs.findAll(org.springframework.data.domain.PageRequest.of(
+                        Math.max(0, page), Math.min(Math.max(1, size), 200),
+                        org.springframework.data.domain.Sort.by(
+                                org.springframework.data.domain.Sort.Direction.DESC,
+                                "createdAt")))
+                .getContent();
     }
 
     @GetMapping("/runs/{id}")

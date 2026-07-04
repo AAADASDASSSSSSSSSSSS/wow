@@ -99,6 +99,9 @@ services:
       RATSNEST_DB_URL: jdbc:postgresql://postgres:5432/ratsnest
       RATSNEST_KAFKA: kafka:9092
       RATSNEST_SELF_URL: http://backend-cluster:8080
+      # override BOTH in production (docker compose --env-file or secrets)
+      RATSNEST_JWT_SECRET: ${RATSNEST_JWT_SECRET:-cluster-demo-secret-0123456789abcdef00}
+      RATSNEST_SERVICE_TOKEN: ${RATSNEST_SERVICE_TOKEN:-cluster-demo-service-token}
 
   worker:
     image: ratsnest-runtime
@@ -107,6 +110,7 @@ services:
     entrypoint: ["python", "-m", "ratsnest.worker"]
     environment:
       RATSNEST_KAFKA: kafka:9092
+      RATSNEST_SERVICE_TOKEN: ${RATSNEST_SERVICE_TOKEN:-cluster-demo-service-token}
     volumes:
       - ../runs:/repo/RatsNest/runs
       - worker-projects:/tmp/ratsnest-designs
