@@ -49,6 +49,8 @@ def _get_host(config: Config):
     import importlib
     module = importlib.import_module("kicad_interface")
     _host = module.KiCADInterface()
+    from ratsnest.mcp_exec.hotfixes import apply_hotfixes
+    apply_hotfixes(_host, config)
     return _host
 
 
@@ -176,6 +178,10 @@ class CreatorCrew:
                 "componentRef": ref, "pinNumber": pin,
             })
 
+        # project fp-lib-table so the vendored LibraryManager (and KiCad
+        # itself) can resolve the stock footprint libraries we reference
+        self._write_fp_lib_table(out_dir, footprint_map)
+
         # --- LayoutAgent: schematic -> board (F8), outline, placement --------
         board = out_dir / f"{name}.kicad_pcb"
         outline: dict = strategy.solver_params.get(
@@ -187,12 +193,21 @@ class CreatorCrew:
             self.layout.call("set_board_size", {
                 "width": float(outline.get("width", 50)),
                 "height": float(outline.get("height", 35)), "unit": "mm"})
-            # simple deterministic placement: one row, 8mm pitch
-            for i, (ref, *_rest) in enumerate(placements):
+            # deterministic row placement, width-aware so courtyards clear
+            # (PM-001/PM-002 taught us: edge margins + per-package widths)
+            width_by_lib = {"Package_TO_SOT_SMD": 9.0,
+                            "Connector_PinHeader_2.54mm": 7.0}
+            cursor = 8.0
+            prev_half = 0.0
+            for ref, symbol, *_rest in placements:
+                fp = str(footprint_map.get(symbol, ""))
+                half = width_by_lib.get(fp.split(":", 1)[0], 4.0) / 2
+                cursor += prev_half + half + 1.5
+                prev_half = half
                 try:
                     self.layout.call("move_component", {
                         "reference": ref,
-                        "position": {"x": 8.0 + 8.0 * i, "y": 12.0,
+                        "position": {"x": round(cursor, 2), "y": 15.0,
                                      "unit": "mm"}})
                 except AgentError:
                     pass
@@ -220,3 +235,23 @@ class CreatorCrew:
         (out_dir / "designspec.json").write_text(
             spec.model_dump_json(indent=2), encoding="utf-8")
         return out_dir
+
+    def _write_fp_lib_table(self, out_dir: Path,
+                            footprint_map: dict) -> None:
+        if not self.config.kicad_python:
+            return
+        fp_root = (Path(self.config.kicad_python).parent.parent
+                   / "share" / "kicad" / "footprints")
+        libs = sorted({str(fp).split(":", 1)[0]
+                       for fp in footprint_map.values() if ":" in str(fp)})
+        rows = []
+        for lib in libs:
+            pretty = fp_root / f"{lib}.pretty"
+            if pretty.exists():
+                uri = str(pretty).replace("\\", "/")
+                rows.append(f'  (lib (name "{lib}")(type "KiCad")'
+                            f'(uri "{uri}")(options "")(descr ""))')
+        if rows:
+            (out_dir / "fp-lib-table").write_text(
+                "(fp_lib_table\n  (version 7)\n" + "\n".join(rows) + "\n)\n",
+                encoding="utf-8")

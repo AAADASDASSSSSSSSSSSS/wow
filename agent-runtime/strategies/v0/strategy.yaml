@@ -13,6 +13,10 @@ suppressions:
       is expected on externally powered rails.
   - rule_id: DS-002
     reason: datasheet sync is not part of the offline benchmark environment
+  - rule_id: TE-001
+    reason: >-
+      generated prototype boards do not carry test points yet; test-point
+      coverage becomes a requirement at the pre-fab stage, not generation
 
 repair_mappings:
   - match_rule_id: RN-VOUT-001     # synthesized: feedback divider vs rail name

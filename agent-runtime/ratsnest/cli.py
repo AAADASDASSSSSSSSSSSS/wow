@@ -175,6 +175,10 @@ def cmd_export_schemas(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # CJK consoles (GBK) choke on characters like mm² in finding summaries
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     parser = argparse.ArgumentParser(prog="ratsnest")
     sub = parser.add_subparsers(dest="command", required=True)
 
