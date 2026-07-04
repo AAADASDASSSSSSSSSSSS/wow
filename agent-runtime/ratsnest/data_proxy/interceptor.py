@@ -25,12 +25,15 @@ except ImportError:  # httpx is optional; JSONL sink always works
 
 class Recorder:
     def __init__(self, run_dir: Path, run_id: str,
-                 control_plane_url: str | None = None):
+                 control_plane_url: str | None = None,
+                 base_metadata: dict[str, Any] | None = None):
         self.run_dir = Path(run_dir)
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.run_id = run_id
         self.path = self.run_dir / "trajectory.jsonl"
         self.control_plane_url = control_plane_url
+        # run-level provenance (strategy version etc.) stamped on every event
+        self.base_metadata = base_metadata or {}
         self._step = 0
 
     def emit(self, node: str, iteration: int = 0,
@@ -45,7 +48,7 @@ class Recorder:
             run_id=self.run_id, iteration=iteration, step=self._step, node=node,
             observation=observation or {}, agent_state=agent_state or {},
             action=action or {}, outcome=outcome or {}, reward=reward,
-            metadata=metadata or {},
+            metadata={**self.base_metadata, **(metadata or {})},
         )
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(event.model_dump_json() + "\n")

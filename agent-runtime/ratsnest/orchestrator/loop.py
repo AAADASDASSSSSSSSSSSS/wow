@@ -50,8 +50,14 @@ class RunLoop:
 
     # ------------------------------------------------------------------
     def _evaluate(self, project_dir: Path, strategy: StrategyBundle,
-                  run_erc_flag: bool) -> EvaluationResult:
-        outputs = self.adapter.analyze_all(project_dir)
+                  run_erc_flag: bool, recorder=None,
+                  iteration: int = 0) -> EvaluationResult:
+        # kicad-happy disassembled: each analyzer runs as a checker-crew
+        # agent with its own ATDP identity (in-process, code stays vendored)
+        from ratsnest.crews import CheckerCrew
+        crew = CheckerCrew(self.config, strategy, recorder=recorder,
+                           iteration=iteration)
+        outputs = crew.evaluate(project_dir)
         erc = run_erc(project_dir, self.config) if run_erc_flag else None
         return synthesize(outputs, strategy, project_dir, erc_passed=erc)
 
@@ -68,13 +74,14 @@ class RunLoop:
         record = RunRecord(config=run_config,
                            strategy_version_id=strategy.version_id(),
                            status="running")
-        rec = Recorder(self.store.run_dir(record.run_id), record.run_id,
-                       self.config.control_plane_url)
         meta = {"strategy_version_id": strategy.version_id(),
                 "project": str(project_dir)}
+        rec = Recorder(self.store.run_dir(record.run_id), record.run_id,
+                       self.config.control_plane_url, base_metadata=meta)
         sch_path = find_root_schematic(project_dir)
 
-        ev = self._evaluate(project_dir, strategy, run_config.run_erc)
+        ev = self._evaluate(project_dir, strategy, run_config.run_erc,
+                            recorder=rec, iteration=0)
         initial_score = ev.scorecard.score
         rec.emit("evaluate", 0,
                  observation={"project": str(project_dir)},
@@ -134,7 +141,8 @@ class RunLoop:
                     patch_plan=plan, patch_result=result))
                 break
 
-            new_ev = self._evaluate(project_dir, strategy, run_config.run_erc)
+            new_ev = self._evaluate(project_dir, strategy, run_config.run_erc,
+                                    recorder=rec, iteration=iteration)
             new_errors = _error_ids(new_ev) - prev_errors
             score_delta = new_ev.scorecard.score - prev_score
             vetoed = bool(new_errors) or score_delta < 0

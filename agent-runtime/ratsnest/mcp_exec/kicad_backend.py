@@ -23,11 +23,11 @@ from ratsnest.design_gen.templates import rail_name
 from ratsnest.mcp_exec.client import McpClient
 from ratsnest.schemas import DesignSpec, StrategyBundle
 
-# real KiCad library part (stock symbol libs): adjustable 1.25V regulator —
-# present in the strategy vref_table, so the synthesizer can verify its divider
-MCP_REGULATOR_PART = "LM317"
-MCP_REGULATOR_SYMBOL = "Regulator_Linear:LM317_3PinPackage"
-# LM317 TO-220: pin 1 = ADJ, pin 2 = VOUT, pin 3 = VIN
+# real KiCad 10 library part (verified in Regulator_Linear.kicad_sym):
+# adjustable 1.25V regulator already covered by the strategy's Vref table.
+# AP1117 pinout: pin 1 = ADJ, pin 2 = VOUT, pin 3 = VIN
+MCP_REGULATOR_PART = "AP1117-ADJ"
+MCP_REGULATOR_SYMBOL = "Regulator_Linear:AP1117-ADJ"
 
 
 class KiCadMcpBackend:
@@ -72,6 +72,7 @@ class KiCadMcpBackend:
 
             # --- SchematicAgent: place from real KiCad libraries ---------------
             placements = [
+                ("J1", "Connector_Generic:Conn_01x02", "Conn_01x02", 75, 60),
                 ("U1", MCP_REGULATOR_SYMBOL, values["U1"], 100, 60),
                 ("R1", "Device:R", values["R1"], 130, 55),
                 ("R2", "Device:R", values["R2"], 130, 80),
@@ -91,6 +92,7 @@ class KiCadMcpBackend:
             # --- SchematicAgent: connectivity via pin-snapped net labels -------
             # (componentRef+pinNumber guarantees the electrical connection)
             nets: list[tuple[str, str, str]] = [
+                (vin, "J1", "1"), ("GND", "J1", "2"),
                 (vin, "U1", "3"),
                 (vout, "U1", "2"), (vout, "R1", "1"),
                 ("FB", "U1", "1"), ("FB", "R1", "2"), ("FB", "R2", "1"),

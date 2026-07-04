@@ -101,6 +101,26 @@ serve the latest dashboard without changing the REST API.
 | `RATSNEST_RUNS_DIR` | `./runs` | run records + trajectories |
 | `RATSNEST_CONTROL_PLANE_URL` | *(unset)* | if set, ATDP events also POST to Spring backend |
 
+## Agent crews (the disassembly)
+
+The two vendored projects are no longer modules behind adapters — their code
+is mounted in-process as **skills owned by agents** (repos stay pullable;
+`ratsnest/kicad_env.py` makes pcbnew + KiCad symbol libs importable in our venv):
+
+| Crew | Agent | Skills (vendored source) |
+|---|---|---|
+| creator | `project_agent` | create/save/close/open project (KiCAD-MCP-Server python, no Node) |
+| creator | `symbol_agent` | `add_schematic_component` — real KiCad 10 symbol libraries |
+| creator | `wiring_agent` | pin-snapped net labels, `connect_to_net`, wires |
+| checker | `schematic_analyst` | kicad-happy `analyze_schematic` (in-process) |
+| checker | `pcb_analyst` | kicad-happy `analyze_pcb` (in-process) |
+| repair | planner / patcher / verifier | mapping table + solvers, ops-only editor, veto |
+| evolution | triggers / experiments / gates | offline AHE over ATDP trajectories |
+
+Every agent action is one ATDP event (`crew.agent` node name, run-level
+strategy stamp via Recorder base metadata). Per-agent knobs live in the
+strategy's `analysts` slice — individual checkers are evolvable assets.
+
 ## Design creation backends
 
 | Backend | What it does |
