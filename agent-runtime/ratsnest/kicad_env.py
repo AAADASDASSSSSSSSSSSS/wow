@@ -39,6 +39,11 @@ def bootstrap_kicad(kicad_python: Path | None = None) -> bool:
     if symbols.exists():
         for var in ("KICAD10_SYMBOL_DIR", "KICAD9_SYMBOL_DIR", "KICAD_SYMBOL_DIR"):
             os.environ.setdefault(var, str(symbols))
+    footprints = bin_dir.parent / "share" / "kicad" / "footprints"
+    if footprints.exists():
+        for var in ("KICAD10_FOOTPRINT_DIR", "KICAD9_FOOTPRINT_DIR",
+                    "KICAD_FOOTPRINT_DIR"):
+            os.environ.setdefault(var, str(footprints))
     try:
         import pcbnew  # noqa: F401
     except Exception:

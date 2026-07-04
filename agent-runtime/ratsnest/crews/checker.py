@@ -70,7 +70,8 @@ class DependentAnalyst(Agent):
     (--schematic/--pcb/--output JSON files)."""
 
     crew = "checker"
-    script = ""  # e.g. "cross_analysis.py"
+    script = ""       # e.g. "cross_analysis.py"
+    skill = "kicad"   # kicad-happy skill dir the script lives in
 
     def __init__(self, config: Config, **kw):
         super().__init__(**kw)
@@ -82,7 +83,8 @@ class DependentAnalyst(Agent):
         import subprocess
         import sys
         import tempfile
-        script = self.config.kicad_scripts / self.script
+        script = (self.config.kicad_happy_root / "skills" / self.skill
+                  / "scripts" / self.script)
 
         def run() -> dict:
             with tempfile.TemporaryDirectory() as td:
@@ -120,6 +122,12 @@ class ThermalAnalyst(DependentAnalyst):
     script = "analyze_thermal.py"
 
 
+class EmcAnalyst(DependentAnalyst):
+    name = "emc_analyst"
+    script = "analyze_emc.py"
+    skill = "emc"
+
+
 class CheckerCrew:
     """Fan-out over analyst agents; roster is strategy-governed."""
 
@@ -141,6 +149,10 @@ class CheckerCrew:
             self.dependents.append(CrossAnalyst(self.config, **common))
         if self.cfg.get("thermal", True):
             self.dependents.append(ThermalAnalyst(self.config, **common))
+        # EMC is opt-in until generated boards carry real placement: its
+        # geometry rules assume laid-out boards (enable via analysts.emc)
+        if self.cfg.get("emc", False):
+            self.dependents.append(EmcAnalyst(self.config, **common))
 
     def evaluate(self, project_dir: Path) -> dict[str, AnalyzerOutput]:
         outputs: dict[str, AnalyzerOutput] = {}

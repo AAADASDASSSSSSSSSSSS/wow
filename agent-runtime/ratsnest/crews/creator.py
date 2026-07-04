@@ -94,8 +94,14 @@ class WiringAgent(KiCadSkillAgent):
 
 class LayoutAgent(KiCadSkillAgent):
     name = "layout_agent"
-    commands = ("set_board_size", "add_board_outline", "place_component",
-                "suggest_placement")
+    commands = ("sync_schematic_to_board", "set_board_size",
+                "add_board_outline", "place_component", "suggest_placement",
+                "move_component")
+
+
+class RoutingAgent(KiCadSkillAgent):
+    name = "routing_agent"
+    commands = ("route_pad_to_pad",)
 
 
 class CreatorCrew:
@@ -107,6 +113,7 @@ class CreatorCrew:
         self.symbols = SymbolAgent(self.config, **common)
         self.wiring = WiringAgent(self.config, **common)
         self.layout = LayoutAgent(self.config, **common)
+        self.routing = RoutingAgent(self.config, **common)
 
     def generate(self, spec: DesignSpec, out_dir: Path,
                  strategy: StrategyBundle) -> Path:
@@ -143,6 +150,18 @@ class CreatorCrew:
                               "x": x, "y": y,
                               "unit": 1, "angle": 0, "mirrorY": False},
             })
+        # the vendored placement handler drops the footprint field — stamp
+        # footprints with OUR ops-only editor so board sync can import them
+        from ratsnest.design_edit.sexp_edit import apply_property_updates
+        fp_updates: dict[str, dict[str, str]] = {}
+        for ref, symbol, *_ in placements:
+            fp = str(footprint_map.get(symbol, ""))
+            if fp:
+                fp_updates[ref] = {"Footprint": fp}
+        if fp_updates:
+            new_text, _log = apply_property_updates(
+                sch.read_text(encoding="utf-8"), fp_updates, self.config)
+            sch.write_text(new_text, encoding="utf-8")
 
         nets = [(vin, "J1", "1"), ("GND", "J1", "2"),
                 (vin, "U1", "3"), (vout, "U1", "2"), (vout, "R1", "1"),
@@ -157,17 +176,41 @@ class CreatorCrew:
                 "componentRef": ref, "pinNumber": pin,
             })
 
-        # layout agent: board outline so the PCB side has real geometry
+        # --- LayoutAgent: schematic -> board (F8), outline, placement --------
+        board = out_dir / f"{name}.kicad_pcb"
         outline: dict = strategy.solver_params.get(
             "board_outline", {"width": 50, "height": 35})
+        routed = 0
         try:
+            self.layout.call("sync_schematic_to_board", {
+                "schematicPath": str(sch), "boardPath": str(board)})
             self.layout.call("set_board_size", {
                 "width": float(outline.get("width", 50)),
-                "height": float(outline.get("height", 35)),
-                "unit": "mm",
-            })
+                "height": float(outline.get("height", 35)), "unit": "mm"})
+            # simple deterministic placement: one row, 8mm pitch
+            for i, (ref, *_rest) in enumerate(placements):
+                try:
+                    self.layout.call("move_component", {
+                        "reference": ref,
+                        "position": {"x": 8.0 + 8.0 * i, "y": 12.0,
+                                     "unit": "mm"}})
+                except AgentError:
+                    pass
+            # --- RoutingAgent: chain-route every net's pins -------------------
+            by_net: dict[str, list[tuple[str, str]]] = {}
+            for net, ref, pin in nets:
+                by_net.setdefault(net, []).append((ref, pin))
+            for net, pins in by_net.items():
+                for (r1, p1), (r2, p2) in zip(pins, pins[1:]):
+                    try:
+                        self.routing.call("route_pad_to_pad", {
+                            "fromRef": r1, "fromPad": p1,
+                            "toRef": r2, "toPad": p2})
+                        routed += 1
+                    except AgentError:
+                        pass  # partial routing is acceptable in gen v1
         except AgentError:
-            pass  # board geometry is best-effort in gen v1
+            pass  # board work is best-effort; the schematic is authoritative
 
         self.project.call("save_project", {"force": True})
         self.project.call("close_project", {"save": False})
