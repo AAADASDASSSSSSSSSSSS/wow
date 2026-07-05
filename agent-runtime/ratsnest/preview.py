@@ -28,6 +28,34 @@ def _run(cmd: list[str]) -> bool:
         return False
 
 
+def snapshot_schematic(project_dir: Path, tag: str,
+                       config: Config | None = None) -> Path | None:
+    """One timeline frame: export the schematic's CURRENT state to
+    preview/steps/<tag>.svg. Best-effort and cheap to call after each agent
+    action — this is what the frontend plays back step by step."""
+    config = config or Config.load()
+    if not config.kicad_cli or not Path(config.kicad_cli).exists():
+        return None
+    project_dir = Path(project_dir)
+    schs = sorted(project_dir.glob("*.kicad_sch"))
+    if not schs:
+        return None
+    steps_dir = project_dir / "preview" / "steps"
+    steps_dir.mkdir(parents=True, exist_ok=True)
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        if not _run([str(config.kicad_cli), "sch", "export", "svg",
+                     "--output", td, "--no-background-color", str(schs[0])]):
+            return None
+        produced = sorted(Path(td).glob("*.svg"))
+        if not produced:
+            return None
+        safe = "".join(c for c in tag if c.isalnum() or c in "_-")[:60]
+        target = steps_dir / f"{safe}.svg"
+        shutil.copy(produced[-1], target)
+        return target
+
+
 def generate_previews(project_dir: Path,
                       config: Config | None = None) -> dict[str, Path]:
     config = config or Config.load()

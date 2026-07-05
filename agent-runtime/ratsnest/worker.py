@@ -36,12 +36,20 @@ def handle_request(msg: dict, config: Config) -> None:
     spec = None
     strategy = None
     if kind == "design":
+        from ratsnest.data_proxy import Recorder
         from ratsnest.evolution import StrategyRegistry
+        from ratsnest.orchestrator import RunStore
         from ratsnest.pipeline import generate_for_backend
         _, strategy = StrategyRegistry(config.strategies_dir).load_active()
+        # recorder -> the LLM brain + step timeline stream to the control
+        # plane during cluster generation, same as local runs
+        gen_id = f"gen_{msg.get('runId', 'worker')}"
+        recorder = Recorder(RunStore(config.runs_dir).run_dir(gen_id),
+                            gen_id, config.control_plane_url)
         spec = generate_for_backend(
             msg.get("requirement", ""), Path(project_dir),
-            msg.get("backend", "template"), strategy, config)
+            msg.get("backend", "template"), strategy, config,
+            recorder=recorder)
 
     record = RunLoop(config).execute(RunConfig(
         project_dir=project_dir, max_iterations=max_iter, run_erc=False))

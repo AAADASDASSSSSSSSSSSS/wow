@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -126,6 +127,11 @@ def cmd_design(args) -> int:
         if k in outputs:
             say(f"{k}: {outputs[k]}")
     _print_scorecard(ev.scorecard, ev.findings)
+    if getattr(args, "open", False):
+        pros = sorted(Path(out_dir).glob("*.kicad_pro"))
+        if pros and hasattr(os, "startfile"):
+            say(f"opening in KiCad: {pros[0].name}")
+            os.startfile(str(pros[0]))  # noqa: S606 - explicit user request
     return 0 if ev.scorecard.severity_counts.get("error", 0) == 0 else 1
 
 
@@ -237,6 +243,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-erc", action="store_true")
     p.add_argument("--json", action="store_true",
                    help="print the RunRecord JSON (control-plane dispatch mode)")
+    p.add_argument("--open", action="store_true",
+                   help="open the finished project in KiCad (local use)")
     p.set_defaults(func=cmd_design)
 
     p = sub.add_parser("evolve", help="run an AHE experiment (offline)")

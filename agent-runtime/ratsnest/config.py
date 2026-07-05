@@ -23,9 +23,11 @@ class Config:
     mcp_server_dir: Path | None = None
     kicad_python: Path | None = None
     llm_api_key: str | None = None
-    llm_base_url: str = "https://api.anthropic.com"
-    llm_model: str = "claude-sonnet-5"
-    llm_enabled: bool = True  # auto-disabled when no key is configured
+    llm_provider: str = "anthropic"  # anthropic|openai|deepseek|qwen|moonshot|zhipu|ollama
+    llm_base_url: str = ""           # empty -> provider preset
+    llm_model: str = ""              # empty -> provider preset
+    llm_enabled: bool = True         # RATSNEST_LLM=off disables
+    llm_required: bool = False       # RATSNEST_LLM=require forbids fallback
 
     @property
     def kicad_scripts(self) -> Path:
@@ -74,12 +76,19 @@ class Config:
             ),
             llm_api_key=(os.environ.get("RATSNEST_LLM_API_KEY")
                          or os.environ.get("ANTHROPIC_API_KEY")
-                         or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
+                         or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+                         or os.environ.get("OPENAI_API_KEY")),
+            llm_provider=os.environ.get(
+                "RATSNEST_LLM_PROVIDER", "anthropic").lower(),
             llm_base_url=(os.environ.get("RATSNEST_LLM_BASE_URL")
-                          or os.environ.get("ANTHROPIC_BASE_URL")
-                          or "https://api.anthropic.com"),
-            llm_model=os.environ.get("RATSNEST_LLM_MODEL", "claude-sonnet-5"),
+                          or (os.environ.get("ANTHROPIC_BASE_URL")
+                              if os.environ.get("RATSNEST_LLM_PROVIDER",
+                                                "anthropic") == "anthropic"
+                              else "")
+                          or ""),
+            llm_model=os.environ.get("RATSNEST_LLM_MODEL", ""),
             llm_enabled=os.environ.get("RATSNEST_LLM", "auto") != "off",
+            llm_required=os.environ.get("RATSNEST_LLM", "auto") == "require",
         )
 
 

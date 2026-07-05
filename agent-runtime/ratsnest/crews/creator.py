@@ -124,6 +124,8 @@ class CreatorCrew:
                  llm=None):
         self.config = config or Config.load()
         self.llm = llm
+        self.recorder = recorder
+        self._step_n = 0
         common = dict(recorder=recorder, iteration=iteration)
         self.project = ProjectAgent(self.config, **common)
         self.symbols = SymbolAgent(self.config, **common)
@@ -162,6 +164,24 @@ class CreatorCrew:
             return None
         return got, str(raw.get("rationale", ""))[:500]
 
+    def _snapshot(self, out_dir: Path, label: str) -> None:
+        """Timeline frame after an agent action: SVG of the current schematic
+        state + an ATDP event the frontend renders as a step."""
+        if self.recorder is None:
+            return
+        from ratsnest.preview import snapshot_schematic
+        self._step_n += 1
+        tag = f"step_{self._step_n:02d}_{label}"
+        path = snapshot_schematic(out_dir, tag, self.config)
+        self.recorder.emit(
+            "creator.step", 0,
+            action={"step": self._step_n, "label": label.replace('_', ' ')},
+            outcome={"ok": True,
+                     "preview": (f"preview/steps/{path.name}"
+                                 if path else None)},
+            metadata={"agent": "timeline", "crew": "creator"},
+        )
+
     def generate(self, spec: DesignSpec, out_dir: Path,
                  strategy: StrategyBundle) -> Path:
         out_dir = Path(out_dir).resolve()
@@ -176,6 +196,7 @@ class CreatorCrew:
         # documents {projectName} — the handler is fed directly in-process
         self.project.call("create_project", {"projectName": name, "name": name,
                                              "path": str(out_dir)})
+        self._snapshot(out_dir, "create_project")
 
         placements = [
             ("J1", "Connector_Generic:Conn_01x02", "Conn_01x02", 75, 60),
@@ -206,6 +227,7 @@ class CreatorCrew:
                               "x": x, "y": y,
                               "unit": 1, "angle": 0, "mirrorY": False},
             })
+            self._snapshot(out_dir, f"place_{ref}")
         # the vendored placement handler drops the footprint field — stamp
         # footprints with OUR ops-only editor so board sync can import them
         from ratsnest.design_edit.sexp_edit import apply_property_updates
@@ -231,6 +253,7 @@ class CreatorCrew:
                 "schematicPath": str(sch), "netName": net,
                 "componentRef": ref, "pinNumber": pin,
             })
+        self._snapshot(out_dir, "connect_nets")
 
         # project fp-lib-table so the vendored LibraryManager (and KiCad
         # itself) can resolve the stock footprint libraries we reference
@@ -283,6 +306,7 @@ class CreatorCrew:
 
         self.project.call("save_project", {"force": True})
         self.project.call("close_project", {"save": False})
+        self._snapshot(out_dir, "board_complete")
 
         if not sch.exists():
             raise GenerationError(f"creator crew finished but {sch} missing")

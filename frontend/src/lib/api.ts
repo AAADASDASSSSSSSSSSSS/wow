@@ -139,6 +139,17 @@ export function downloadUrl(id: string): string {
   return `/api/runs/${encodeURIComponent(id)}/download`;
 }
 
-export function previewUrl(id: string, which: "sch" | "pcb"): string {
-  return `/api/runs/${encodeURIComponent(id)}/preview/${which}`;
+export function previewUrl(id: string, which: string): string {
+  return `/api/runs/${encodeURIComponent(id)}/preview/${encodeURIComponent(which)}`;
+}
+
+export function listSteps(id: string): Promise<string[]> {
+  return requestJson<string[]>(`/api/runs/${encodeURIComponent(id)}/steps`);
+}
+
+export async function getReport(id: string): Promise<string | null> {
+  const response = await fetch(`/api/runs/${encodeURIComponent(id)}/report`, {
+    headers: authHeaders()
+  });
+  return response.ok ? response.text() : null;
 }

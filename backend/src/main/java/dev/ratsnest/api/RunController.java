@@ -165,18 +165,20 @@ public class RunController {
         }
     }
 
-    /** Read-only SVG preview (which = sch | pcb), generated headless by the
-     *  agent runtime. Served for inline <img> display in the browser. */
+    /** Read-only SVG preview: which = sch | pcb | step_NN_label (execution
+     *  timeline frames emitted by the creator crew after each agent action). */
     @GetMapping("/runs/{id}/preview/{which}")
     public ResponseEntity<Resource> preview(@PathVariable String id,
                                             @PathVariable String which) {
         DesignRun run = runs.findById(id).filter(this::canAccess)
                 .orElse(null);
         if (run == null || run.getProjectDir() == null
-                || !Set.of("sch", "pcb").contains(which)) {
+                || !which.matches("sch|pcb|step_[A-Za-z0-9_\\-]{1,60}")) {
             return ResponseEntity.notFound().build();
         }
-        Path svg = Path.of(run.getProjectDir(), "preview", which + ".svg");
+        Path svg = which.startsWith("step_")
+                ? Path.of(run.getProjectDir(), "preview", "steps", which + ".svg")
+                : Path.of(run.getProjectDir(), "preview", which + ".svg");
         if (!Files.isRegularFile(svg)) {
             return ResponseEntity.notFound().build();
         }
@@ -186,6 +188,49 @@ public class RunController {
                     .contentType(MediaType.valueOf("image/svg+xml"))
                     .header(HttpHeaders.CACHE_CONTROL, "no-cache")
                     .body(new InputStreamResource(new ByteArrayInputStream(body)));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /** Execution timeline frames available for a run, in step order. */
+    @GetMapping("/runs/{id}/steps")
+    public ResponseEntity<List<String>> steps(@PathVariable String id) {
+        DesignRun run = runs.findById(id).filter(this::canAccess).orElse(null);
+        if (run == null || run.getProjectDir() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        Path dir = Path.of(run.getProjectDir(), "preview", "steps");
+        if (!Files.isDirectory(dir)) {
+            return ResponseEntity.ok(List.of());
+        }
+        try (Stream<Path> files = Files.list(dir)) {
+            return ResponseEntity.ok(files
+                    .map(p -> p.getFileName().toString())
+                    .filter(n -> n.endsWith(".svg"))
+                    .map(n -> n.substring(0, n.length() - 4))
+                    .sorted()
+                    .toList());
+        } catch (IOException e) {
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
+    /** The kicad-happy style design report (markdown). */
+    @GetMapping("/runs/{id}/report")
+    public ResponseEntity<String> report(@PathVariable String id) {
+        DesignRun run = runs.findById(id).filter(this::canAccess).orElse(null);
+        if (run == null || run.getProjectDir() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        Path md = Path.of(run.getProjectDir(), "ratsnest_report.md");
+        if (!Files.isRegularFile(md)) {
+            return ResponseEntity.notFound().build();
+        }
+        try {
+            return ResponseEntity.ok()
+                    .contentType(MediaType.valueOf("text/markdown;charset=UTF-8"))
+                    .body(Files.readString(md));
         } catch (IOException e) {
             return ResponseEntity.internalServerError().build();
         }
