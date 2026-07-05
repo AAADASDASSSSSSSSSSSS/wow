@@ -22,6 +22,10 @@ class Config:
     control_plane_url: str | None
     mcp_server_dir: Path | None = None
     kicad_python: Path | None = None
+    llm_api_key: str | None = None
+    llm_base_url: str = "https://api.anthropic.com"
+    llm_model: str = "claude-sonnet-5"
+    llm_enabled: bool = True  # auto-disabled when no key is configured
 
     @property
     def kicad_scripts(self) -> Path:
@@ -68,6 +72,14 @@ class Config:
                 os.environ.get("RATSNEST_KICAD_PYTHON"),
                 Path(r"E:\KiCad\10.0\bin\python.exe"),
             ),
+            llm_api_key=(os.environ.get("RATSNEST_LLM_API_KEY")
+                         or os.environ.get("ANTHROPIC_API_KEY")
+                         or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
+            llm_base_url=(os.environ.get("RATSNEST_LLM_BASE_URL")
+                          or os.environ.get("ANTHROPIC_BASE_URL")
+                          or "https://api.anthropic.com"),
+            llm_model=os.environ.get("RATSNEST_LLM_MODEL", "claude-sonnet-5"),
+            llm_enabled=os.environ.get("RATSNEST_LLM", "auto") != "off",
         )
 
 

@@ -1,8 +1,9 @@
-"""Requirement agent: natural language -> DesignSpec.
+"""Requirement Understanding Agent: natural language -> DesignSpec.
 
-Deterministic pattern extraction (default, zero API keys). An LLM hook can
-replace this for richer requirements later; the output contract (DesignSpec)
-stays identical either way.
+Brain-first: when an LLM is available it interprets the requirement (handles
+complex, indirect, or multilingual phrasing) and must emit JSON that
+validates against the DesignSpec contract — invalid output falls back to the
+deterministic pattern extractor, and the run records which brain decided.
 """
 
 from __future__ import annotations
@@ -10,6 +11,50 @@ from __future__ import annotations
 import re
 
 from ratsnest.schemas import DesignSpec
+
+_SPEC_PROMPT = """You convert an electronics requirement into a DesignSpec \
+JSON for a linear-regulator board generator (the only family supported: one \
+adjustable LDO stepping an input rail down to an output rail, with an \
+optional indicator LED).
+
+Return ONLY a JSON object with exactly these keys:
+  project_name       short snake_case slug derived from the requirement
+  input_voltage      number (volts, must be greater than output_voltage)
+  output_voltage     number (volts)
+  output_current_a   number (amps, default 0.5 if unstated)
+  led                one of "red","green","blue","yellow","white","orange" \
+or null if the user does not want an LED
+
+Rules: a linear regulator steps DOWN, so if roles are ambiguous the larger \
+voltage is the input. Requirements may be in any language. If the user asks \
+for anything beyond this family (buck, MCU, USB...), still map the power \
+rails onto this family — the checker crew will flag mismatches later."""
+
+
+def parse_requirement_llm(text: str, llm) -> DesignSpec | None:
+    """Brain path. Returns a validated DesignSpec or None (caller falls back)."""
+    if llm is None or not llm.available:
+        return None
+    raw = llm.complete_json("requirement_agent", _SPEC_PROMPT,
+                            f"Requirement: {text}", max_tokens=500)
+    if not raw:
+        return None
+    try:
+        raw.setdefault("requirement_text", text)
+        if raw.get("project_name"):
+            raw["project_name"] = re.sub(
+                r"[^a-z0-9]+", "_", str(raw["project_name"]).lower()).strip("_")[:40]
+        spec = DesignSpec.model_validate(raw)
+    except Exception:
+        return None
+    # contract sanity gates — the brain proposes, the contract disposes
+    if not (0 < spec.output_voltage < spec.input_voltage <= 60):
+        return None
+    if spec.led is not None and spec.led.lower() not in _LED_COLORS:
+        spec.led = "red"
+    if not spec.project_name:
+        spec.project_name = "generated_board"
+    return spec
 
 _LED_COLORS = ("red", "green", "blue", "yellow", "white", "orange")
 

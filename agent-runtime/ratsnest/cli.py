@@ -131,8 +131,37 @@ def cmd_design(args) -> int:
 
 def cmd_evolve(args) -> int:
     from ratsnest.evolution.experiment import run_default_experiment
+
+    candidate = args.candidate
+    if candidate == "llm":
+        # Evolution Agent: brain proposes a bounded diff from trajectory
+        # evidence; the candidate still has to survive the benchmark gates
+        from ratsnest.data_proxy import Recorder
+        from ratsnest.evolution.proposer import propose_candidate
+        from ratsnest.evolution.triggers import compute_stats
+        from ratsnest.llm import LlmClient
+        from ratsnest.orchestrator import RunStore
+
+        config = Config.load()
+        registry = StrategyRegistry(config.strategies_dir)
+        _, incumbent = registry.load_active()
+        recorder = Recorder(RunStore(config.runs_dir).run_dir("evolution_llm"),
+                            "evolution_llm", config.control_plane_url)
+        proposal = propose_candidate(
+            incumbent, compute_stats(config.runs_dir),
+            LlmClient(config, recorder))
+        if proposal is None:
+            print("evolution agent produced no valid candidate "
+                  "(no API key configured, or the diff failed validation)")
+            return 1
+        name, bundle, rationale = proposal
+        registry.save_candidate(bundle, name)
+        print(f"evolution agent proposed: {name}")
+        print(f"  rationale: {rationale}")
+        candidate = name
+
     report = run_default_experiment(promote=args.promote,
-                                    candidate=args.candidate)
+                                    candidate=candidate)
     print(f"experiment {report.experiment_id}: candidate "
           f"'{report.candidate_name}' vs incumbent")
     print(f"  mean score: incumbent={report.mean_incumbent_score:.1f}  "

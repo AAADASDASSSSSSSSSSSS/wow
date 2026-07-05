@@ -78,6 +78,8 @@ class RunLoop:
                 "project": str(project_dir)}
         rec = Recorder(self.store.run_dir(record.run_id), record.run_id,
                        self.config.control_plane_url, base_metadata=meta)
+        from ratsnest.llm import LlmClient
+        llm = LlmClient(self.config, rec)
         sch_path = find_root_schematic(project_dir)
 
         ev = self._evaluate(project_dir, strategy, run_config.run_erc,
@@ -94,9 +96,10 @@ class RunLoop:
             prev_errors = _error_ids(ev)
             prev_ids = _finding_ids(ev)
 
+            llm.iteration = iteration
             plan, hints, escalations = plan_repairs(
                 ev, strategy, run_id=record.run_id, iteration=iteration,
-                config=self.config)
+                config=self.config, llm=llm)
             plan_evt = rec.emit(
                 "plan_repairs", iteration,
                 observation={"actionable": len([f for f in ev.findings

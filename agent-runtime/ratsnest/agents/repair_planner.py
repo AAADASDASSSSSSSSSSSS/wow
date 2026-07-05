@@ -162,12 +162,62 @@ def _mapping_for(f: Finding, strategy: StrategyBundle) -> RepairMapping | None:
     return None
 
 
+_REASONER_PROMPT = """You are the repair reasoning agent of a KiCad design \
+loop. Deterministic solvers have already computed candidate repairs for \
+analyzer findings. Your job: review each candidate, approve the ones that \
+are electrically sound, reject any that could make the design worse, and \
+explain WHY in one sentence each. You cannot change values or invent new \
+repairs — approve/reject/explain only.
+
+Return ONLY JSON:
+{"approve": [finding_id...],
+ "reject": [{"finding_id": str, "reason": str}...],
+ "notes": {finding_id: one-sentence rationale}}"""
+
+
+def _reason_about_repairs(hints: list[RepairHint], findings: list[Finding],
+                          llm) -> dict | None:
+    """Brain path. Returns validated decision or None (keep all hints)."""
+    if llm is None or not llm.available or not hints:
+        return None
+    import json as _json
+    payload = {
+        "findings": [{"finding_id": f.finding_id(), "rule_id": f.rule_id,
+                      "severity": f.severity,
+                      "summary": str((f.model_extra or {}).get("summary", ""))[:200]}
+                     for f in findings if f.severity in ("error", "warning")],
+        "candidate_repairs": [{"finding_id": h.finding_id,
+                               "repair_type": h.repair_type,
+                               "ops": [{"op": o.op.value, "ref": o.ref,
+                                        "params": o.params}
+                                       for o in h.suggested_ops],
+                               "solver_explanation": h.explanation}
+                              for h in hints],
+    }
+    raw = llm.complete_json("repair_reasoner", _REASONER_PROMPT,
+                            _json.dumps(payload), max_tokens=1200)
+    if not raw:
+        return None
+    valid_ids = {h.finding_id for h in hints}
+    approve = [i for i in raw.get("approve", []) if i in valid_ids]
+    rejects = {r.get("finding_id"): str(r.get("reason", ""))[:200]
+               for r in raw.get("reject", [])
+               if isinstance(r, dict) and r.get("finding_id") in valid_ids}
+    if not approve and not rejects:
+        return None  # nothing actionable in the decision -> fail open
+    notes = {k: str(v)[:200] for k, v in (raw.get("notes") or {}).items()
+             if k in valid_ids}
+    return {"approve": set(approve) or (valid_ids - set(rejects)),
+            "rejects": rejects, "notes": notes}
+
+
 def plan_repairs(
     evaluation: EvaluationResult,
     strategy: StrategyBundle,
     run_id: str = "",
     iteration: int = 0,
     config: Config | None = None,
+    llm=None,
 ) -> tuple[PatchPlan, list[RepairHint], list[Finding]]:
     """Returns (plan, hints, escalations). Escalations = actionable findings
     (error/warning) with no mapping or no solvable ops."""
@@ -207,6 +257,23 @@ def plan_repairs(
         ))
         all_ops.extend(ops)
         rationale[f.finding_id()] = explanation
+
+    # brain review: approve/reject/explain — solver output stays authoritative
+    # for values; rejected hints escalate instead of applying silently
+    decision = _reason_about_repairs(hints, evaluation.findings, llm)
+    if decision is not None:
+        approved: set = decision["approve"]
+        kept_hints = [h for h in hints if h.finding_id in approved]
+        all_ops = [op for h in kept_hints for op in h.suggested_ops]
+        finding_by_id = {f.finding_id(): f for f in evaluation.findings}
+        for fid, reason in decision["rejects"].items():
+            rationale[fid] = f"REJECTED by repair reasoner: {reason}"
+            if fid in finding_by_id:
+                escalations.append(finding_by_id[fid])
+        for fid, note in decision["notes"].items():
+            if fid in approved:
+                rationale[fid] = f"{rationale.get(fid, '')} | reasoner: {note}"
+        hints = kept_hints
 
     plan = PatchPlan(run_id=run_id, iteration=iteration, ops=all_ops,
                      strategy_version_id=strategy.version_id(),

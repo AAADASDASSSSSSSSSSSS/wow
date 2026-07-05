@@ -106,16 +106,61 @@ class RoutingAgent(KiCadSkillAgent):
     commands = ("route_pad_to_pad",)
 
 
+_FOREMAN_PROMPT = """You are the tool-use foreman of a KiCad schematic crew. \
+You are given the solved component set (references, symbols, values) and the \
+required net connections. You decide PLACEMENT GEOMETRY on an A4 schematic \
+sheet: x in [70,180], y in [40,110] (mm). Spread components logically \
+(power flow left to right, feedback below the regulator, LED chain on the \
+right) with at least 12mm between component centers.
+
+Return ONLY JSON: {"placements": [{"ref": str, "x": number, "y": number}...],
+"rationale": str}. Include every reference exactly once. Do not add, remove,
+rename or revalue components — electrical topology is fixed by contract."""
+
+
 class CreatorCrew:
     def __init__(self, config: Config | None = None,
-                 recorder: Recorder | None = None, iteration: int = 0):
+                 recorder: Recorder | None = None, iteration: int = 0,
+                 llm=None):
         self.config = config or Config.load()
+        self.llm = llm
         common = dict(recorder=recorder, iteration=iteration)
         self.project = ProjectAgent(self.config, **common)
         self.symbols = SymbolAgent(self.config, **common)
         self.wiring = WiringAgent(self.config, **common)
         self.layout = LayoutAgent(self.config, **common)
         self.routing = RoutingAgent(self.config, **common)
+
+    def _foreman_positions(self, placements: list) -> tuple[dict, str] | None:
+        """Brain path: LLM proposes schematic positions. Contract-validated;
+        None on any violation (caller keeps the deterministic layout)."""
+        if self.llm is None or not self.llm.available:
+            return None
+        payload = {
+            "components": [{"ref": p[0], "symbol": p[1], "value": p[2]}
+                           for p in placements],
+        }
+        import json as _json
+        raw = self.llm.complete_json("creator_foreman", _FOREMAN_PROMPT,
+                                     _json.dumps(payload), max_tokens=800)
+        if not raw or not isinstance(raw.get("placements"), list):
+            return None
+        want = {p[0] for p in placements}
+        got: dict[str, tuple[float, float]] = {}
+        for item in raw["placements"]:
+            try:
+                ref = str(item["ref"])
+                x, y = float(item["x"]), float(item["y"])
+            except (KeyError, TypeError, ValueError):
+                return None
+            if ref not in want or ref in got:
+                return None
+            if not (70 <= x <= 180 and 40 <= y <= 110):
+                return None
+            got[ref] = (x, y)
+        if set(got) != want:
+            return None
+        return got, str(raw.get("rationale", ""))[:500]
 
     def generate(self, spec: DesignSpec, out_dir: Path,
                  strategy: StrategyBundle) -> Path:
@@ -141,6 +186,15 @@ class CreatorCrew:
         if include_led:
             placements += [("R3", "Device:R", values["R3"], 155, 55),
                            ("D1", "Device:LED", values["D1"], 155, 80)]
+
+        # brain: the foreman may re-plan schematic geometry (contract-checked;
+        # topology, refs and values are immutable — LLM proposes, tools execute)
+        foreman = self._foreman_positions(placements)
+        if foreman is not None:
+            positions, _rationale = foreman
+            placements = [(ref, sym, val, *positions[ref])
+                          for ref, sym, val, _x, _y in placements]
+
         footprint_map: dict = strategy.solver_params.get("footprint_map", {})
         for ref, symbol, value, x, y in placements:
             library, sym_type = symbol.split(":")

@@ -26,17 +26,40 @@ VALID_BACKENDS = ("template", "crew", "mcp")
 
 def generate_for_backend(requirement: str, out_dir: Path, backend: str,
                          strategy: StrategyBundle, config: Config,
-                         recorder: Recorder | None = None) -> DesignSpec:
-    """Parse the requirement and build the project with the chosen backend."""
+                         recorder: Recorder | None = None,
+                         llm=None) -> DesignSpec:
+    """Parse the requirement and build the project with the chosen backend.
+
+    Brain-first: the Requirement Understanding Agent (LLM) interprets the
+    text when available; the deterministic extractor is the fallback. Either
+    way the result is the same typed DesignSpec contract.
+    """
     backend = (backend or "template").lower()
     if backend not in VALID_BACKENDS:
         raise ValueError(f"backend must be one of {VALID_BACKENDS}, got {backend!r}")
-    spec = parse_requirement(requirement)
+
+    if llm is None and recorder is not None:
+        from ratsnest.llm import LlmClient
+        llm = LlmClient(config, recorder)
+    spec = None
+    if llm is not None:
+        from ratsnest.design_gen.requirement_agent import parse_requirement_llm
+        spec = parse_requirement_llm(requirement, llm)
+    brain = "llm" if spec is not None else "deterministic"
+    if spec is None:
+        spec = parse_requirement(requirement)
+    if recorder is not None:
+        recorder.emit("requirement_agent", 0,
+                      observation={"requirement": requirement[:300]},
+                      agent_state={"brain": brain},
+                      action={"spec": spec.model_dump(mode="json")},
+                      outcome={"ok": True},
+                      metadata={"agent": "requirement_agent", "crew": "creator"})
     out_dir = Path(out_dir)
 
     if backend == "crew":
         from ratsnest.crews import CreatorCrew
-        CreatorCrew(config, recorder).generate(spec, out_dir, strategy)
+        CreatorCrew(config, recorder, llm=llm).generate(spec, out_dir, strategy)
     elif backend == "mcp":
         from ratsnest.mcp_exec import KiCadMcpBackend
         KiCadMcpBackend(config, recorder).generate(spec, out_dir, strategy)
