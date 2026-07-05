@@ -147,6 +147,50 @@ export function listSteps(id: string): Promise<string[]> {
   return requestJson<string[]>(`/api/runs/${encodeURIComponent(id)}/steps`);
 }
 
+export interface EdaPin {
+  pin: string;
+  net: string | null;
+}
+
+export interface EdaComponent {
+  ref: string;
+  value: string;
+  lib_id: string;
+  x: number;
+  y: number;
+  pins: EdaPin[];
+}
+
+export interface EdaState {
+  schematic: string;
+  components: EdaComponent[];
+  nets: string[];
+  palette: string[];
+  sheet: { width: number; height: number };
+  applied?: string[];
+  errors?: string[];
+}
+
+export type EdaOp =
+  | { op: "move"; ref: string; x: number; y: number }
+  | { op: "set_value"; ref: string; value: string }
+  | { op: "set_property"; ref: string; name: string; value: string }
+  | { op: "add_component"; ref: string; symbol: string; value: string;
+      x: number; y: number }
+  | { op: "connect_net"; ref: string; pin: string; net: string };
+
+export function getEdaState(id: string): Promise<EdaState> {
+  return requestJson<EdaState>(`/api/runs/${encodeURIComponent(id)}/eda`);
+}
+
+export function applyEdaOps(id: string, ops: EdaOp[]): Promise<EdaState> {
+  return requestJson<EdaState>(`/api/runs/${encodeURIComponent(id)}/eda`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(ops)
+  });
+}
+
 export async function getReport(id: string): Promise<string | null> {
   const response = await fetch(`/api/runs/${encodeURIComponent(id)}/report`, {
     headers: authHeaders()

@@ -183,6 +183,23 @@ def cmd_evolve(args) -> int:
     return 0
 
 
+def cmd_eda(args) -> int:
+    """Web-EDA bridge: emit editable state; apply typed ops when given."""
+    from ratsnest.eda import apply_edits, get_state
+    ops = []
+    if args.ops:
+        raw = args.ops
+        if Path(raw).exists():
+            raw = Path(raw).read_text(encoding="utf-8-sig")  # BOM-tolerant
+        ops = json.loads(raw)
+        if not isinstance(ops, list):
+            raise SystemExit("--ops must be a JSON array of edit ops")
+    state = (apply_edits(Path(args.project_dir), ops)
+             if ops else get_state(Path(args.project_dir)))
+    print(json.dumps(state))
+    return 0 if not state.get("errors") else 1
+
+
 def cmd_stats(args) -> int:
     from ratsnest.evolution.triggers import compute_stats, propose_surface
     stats = compute_stats(Config.load().runs_dir)
@@ -254,6 +271,12 @@ def main(argv: list[str] | None = None) -> int:
                    help="name of a strategies/<name> dir to evaluate; "
                         "default: auto-generated candidate")
     p.set_defaults(func=cmd_evolve)
+
+    p = sub.add_parser("eda", help="web-EDA bridge: state out, edit ops in")
+    p.add_argument("project_dir")
+    p.add_argument("--ops", default=None,
+                   help="JSON array of edit ops (inline or a file path)")
+    p.set_defaults(func=cmd_eda)
 
     p = sub.add_parser("stats", help="trigger statistics from ATDP trajectories")
     p.set_defaults(func=cmd_stats)

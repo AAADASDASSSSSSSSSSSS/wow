@@ -46,3 +46,27 @@ def apply_property_updates(
     """
     module = _load_edit_properties(config or Config.load())
     return module.apply_updates(text, updates, dry_run=False)
+
+
+def move_symbol(text: str, ref: str, x: float, y: float,
+                config: Config | None = None) -> tuple[str, bool]:
+    """Move a placed symbol: rewrite its first `(at X Y ANGLE)` in place.
+
+    Only the symbol's own anchor moves — properties keep their relative
+    offsets in KiCad's model, and the analyzer recomputes pin positions from
+    the new anchor. Returns (new_text, moved)."""
+    import re
+    module = _load_edit_properties(config or Config.load())
+    for sym_start, sym_end, sym_ref in module.find_placed_symbols(text):
+        if sym_ref != ref:
+            continue
+        block = text[sym_start:sym_end + 1]
+        match = re.search(
+            r"\(at\s+(-?[\d.]+)\s+(-?[\d.]+)((?:\s+-?[\d.]+)?)\s*\)", block)
+        if not match:
+            return text, False
+        angle = match.group(3) or " 0"
+        new_at = f"(at {round(float(x), 2):g} {round(float(y), 2):g}{angle})"
+        new_block = block[:match.start()] + new_at + block[match.end():]
+        return text[:sym_start] + new_block + text[sym_end + 1:], True
+    return text, False
