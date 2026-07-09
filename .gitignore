@@ -17,3 +17,5 @@ backend/data/
 benchmarks/seeded/*/
 !benchmarks/seeded/.gitkeep
 schemas/*.json
+
+data/
