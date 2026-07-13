@@ -39,7 +39,9 @@ moves out of `crews/creator.py` and becomes public `get_host(config)`.
 
 ### 2. Python — one home for circuit-domain math
 
-New leaf module `ratsnest/circuit_math.py` (imports nothing except `schemas`):
+New leaf module `ratsnest/circuit_math.py` (imports only `config`, `khlib`,
+`schemas` — E-series snapping needs the kicad-happy scripts path; no
+business-module imports):
 
 - `solve_board_values()` — moved from `design_gen/generator.py`
 - `format_ohms()` — moved from `agents/repair_planner.py`
