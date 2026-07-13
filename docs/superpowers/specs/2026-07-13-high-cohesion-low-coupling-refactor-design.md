@@ -99,6 +99,23 @@ props; all HTTP stays in `lib/api.ts`; shared types stay in `lib/runData.ts`.
 Pure extraction — no behavior or styling changes. The rebuilt Vite bundle is
 copied into `backend/src/main/resources/static/` as before.
 
+### 6. Config — `.env` file for model and API key
+
+There is currently no file where a user can put their chosen provider, model,
+and API key; `Config.load()` reads only process environment variables.
+
+- `Config.load()` gains `.env` support: if `<repo-root>/.env` exists, parse it
+  (`KEY=VALUE` lines, `#` comments and blanks ignored — a ~15-line parser, no
+  new dependency) and use its values as *defaults*. Real environment variables
+  always take precedence, so docker-compose and Java-backend-injected vars are
+  never overridden. Because the Python runtime reads the file itself, it works
+  identically from the CLI, the Spring subprocess bridge, and the Kafka worker.
+- New `.env.example` at repo root documenting every `RATSNEST_*` setting with
+  a commented block per provider (anthropic, openai, deepseek, qwen, moonshot,
+  zhipu, ollama): provider, model, API key, base URL, and the
+  `RATSNEST_LLM=off|auto|require` mode.
+- `.env` is added to `.gitignore` so keys are never committed.
+
 ## Error handling
 
 Unchanged. `BrainRequiredError` still raised from `LlmClient` under
@@ -110,7 +127,9 @@ HTTP 404-for-unauthorized policy stays.
 1. `pytest` — all 43 existing tests green, plus new tests: `TemplateBackend`
    satisfies `DesignBackend` structurally; `circuit_math` functions preserve
    behavior at their new home.
-2. Frontend — `npm run build` (strict tsc) and the existing vitest suite.
+2. New test: `.env` parsing (values load, environment wins, missing file is
+   a no-op).
+3. Frontend — `npm run build` (strict tsc) and the existing vitest suite.
 3. Backend — `mvn package` with JAVA_HOME set to Eclipse Adoptium JDK 17.
 4. End-to-end smoke — `python -m ratsnest design --backend template` produces
    the same deliverables (project files, previews, report, release zip).
@@ -118,8 +137,8 @@ HTTP 404-for-unauthorized policy stays.
 ## Delivery
 
 One commit per section, in order (1) kicad_host, (2) circuit_math,
-(3) protocols + registry, (4) Java dedup, (5) frontend decomposition — each
-independently revertable.
+(3) protocols + registry, (4) Java dedup, (5) frontend decomposition,
+(6) .env config support — each independently revertable.
 
 ## Non-goals
 
