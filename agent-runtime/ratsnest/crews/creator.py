@@ -22,6 +22,7 @@ from ratsnest.config import Config
 from ratsnest.data_proxy import Recorder
 from ratsnest.design_gen.templates import rail_name
 from ratsnest.kicad_host import KicadHostError, get_host
+from ratsnest.protocols import LlmBrain
 from ratsnest.schemas import DesignSpec, StrategyBundle
 
 # real KiCad 10 library symbol (verified present in Regulator_Linear.kicad_sym);
@@ -100,7 +101,7 @@ rename or revalue components — electrical topology is fixed by contract."""
 class CreatorCrew:
     def __init__(self, config: Config | None = None,
                  recorder: Recorder | None = None, iteration: int = 0,
-                 llm=None):
+                 llm: LlmBrain | None = None):
         self.config = config or Config.load()
         self.llm = llm
         self.recorder = recorder

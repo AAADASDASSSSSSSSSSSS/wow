@@ -11,6 +11,7 @@ import re
 
 from ratsnest.circuit_math import format_ohms, resistor_mpn, snap_e_series
 from ratsnest.config import Config
+from ratsnest.protocols import LlmBrain
 from ratsnest.schemas import (
     EvaluationResult,
     Finding,
@@ -179,7 +180,7 @@ def plan_repairs(
     run_id: str = "",
     iteration: int = 0,
     config: Config | None = None,
-    llm=None,
+    llm: LlmBrain | None = None,
 ) -> tuple[PatchPlan, list[RepairHint], list[Finding]]:
     """Returns (plan, hints, escalations). Escalations = actionable findings
     (error/warning) with no mapping or no solvable ops."""

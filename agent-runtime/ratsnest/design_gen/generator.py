@@ -40,3 +40,14 @@ def generate_project(spec: DesignSpec, out_dir: Path,
     (out_dir / "designspec.json").write_text(
         spec.model_dump_json(indent=2), encoding="utf-8")
     return out_dir
+
+
+class TemplateBackend:
+    """DesignBackend adapter for the deterministic template writer."""
+
+    def __init__(self, config: Config | None = None):
+        self.config = config or Config.load()
+
+    def generate(self, spec: DesignSpec, out_dir: Path,
+                 strategy: StrategyBundle) -> Path:
+        return generate_project(spec, out_dir, strategy, self.config)

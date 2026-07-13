@@ -16,18 +16,41 @@ from pathlib import Path
 
 from ratsnest.config import Config
 from ratsnest.data_proxy import Recorder
-from ratsnest.design_gen import generate_project, parse_requirement
+from ratsnest.design_gen import parse_requirement
 from ratsnest.preview import generate_previews
+from ratsnest.protocols import DesignBackend, LlmBrain
 from ratsnest.reporting import write_report
 from ratsnest.schemas import DesignSpec, EvaluationResult, RunRecord, StrategyBundle
 
-VALID_BACKENDS = ("template", "crew", "mcp")
+
+def _template_backend(config, recorder, llm) -> DesignBackend:
+    from ratsnest.design_gen.generator import TemplateBackend
+    return TemplateBackend(config)
+
+
+def _crew_backend(config, recorder, llm) -> DesignBackend:
+    from ratsnest.crews import CreatorCrew
+    return CreatorCrew(config, recorder, llm=llm)
+
+
+def _mcp_backend(config, recorder, llm) -> DesignBackend:
+    from ratsnest.mcp_exec import KiCadMcpBackend
+    return KiCadMcpBackend(config, recorder)
+
+
+# registry: adding a backend = one entry here (imports stay lazy)
+BACKEND_FACTORIES = {
+    "template": _template_backend,
+    "crew": _crew_backend,
+    "mcp": _mcp_backend,
+}
+VALID_BACKENDS = tuple(BACKEND_FACTORIES)
 
 
 def generate_for_backend(requirement: str, out_dir: Path, backend: str,
                          strategy: StrategyBundle, config: Config,
                          recorder: Recorder | None = None,
-                         llm=None) -> DesignSpec:
+                         llm: LlmBrain | None = None) -> DesignSpec:
     """Parse the requirement and build the project with the chosen backend.
 
     Brain-first: the Requirement Understanding Agent (LLM) interprets the
@@ -57,14 +80,8 @@ def generate_for_backend(requirement: str, out_dir: Path, backend: str,
                       metadata={"agent": "requirement_agent", "crew": "creator"})
     out_dir = Path(out_dir)
 
-    if backend == "crew":
-        from ratsnest.crews import CreatorCrew
-        CreatorCrew(config, recorder, llm=llm).generate(spec, out_dir, strategy)
-    elif backend == "mcp":
-        from ratsnest.mcp_exec import KiCadMcpBackend
-        KiCadMcpBackend(config, recorder).generate(spec, out_dir, strategy)
-    else:
-        generate_project(spec, out_dir, strategy, config)
+    BACKEND_FACTORIES[backend](config, recorder, llm).generate(
+        spec, out_dir, strategy)
     return spec
 
 

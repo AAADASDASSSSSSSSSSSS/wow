@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from ratsnest.protocols import LlmBrain
 from ratsnest.schemas import DesignSpec
 
 _SPEC_PROMPT = """You convert an electronics requirement into a DesignSpec \
@@ -31,7 +32,7 @@ for anything beyond this family (buck, MCU, USB...), still map the power \
 rails onto this family — the checker crew will flag mismatches later."""
 
 
-def parse_requirement_llm(text: str, llm) -> DesignSpec | None:
+def parse_requirement_llm(text: str, llm: LlmBrain) -> DesignSpec | None:
     """Brain path. Returns a validated DesignSpec or None (caller falls back)."""
     if llm is None or not llm.available:
         return None

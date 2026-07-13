@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ratsnest.protocols import LlmBrain
 from ratsnest.schemas import RepairMapping, StrategyBundle, SuppressionRule
 
 ALLOWED_REPAIR_TYPES = ("feedback_divider", "led_resistor", "fill_mpn")
@@ -36,7 +37,7 @@ diffs fail review.""" % (ALLOWED_REPAIR_TYPES,)
 
 
 def propose_candidate(incumbent: StrategyBundle, stats: dict[str, Any],
-                      llm) -> tuple[str, StrategyBundle, str] | None:
+                      llm: LlmBrain | None) -> tuple[str, StrategyBundle, str] | None:
     """Returns (name, candidate_bundle, rationale) or None."""
     if llm is None or not llm.available:
         return None
