@@ -14,7 +14,6 @@ only as an external integration path (Claude Desktop etc.).
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from ratsnest.agents.base import Agent, AgentError
@@ -22,7 +21,7 @@ from ratsnest.config import Config
 from ratsnest.data_proxy import Recorder
 from ratsnest.design_gen.generator import GenerationError, solve_board_values
 from ratsnest.design_gen.templates import rail_name
-from ratsnest.kicad_env import bootstrap_kicad
+from ratsnest.kicad_host import KicadHostError, get_host
 from ratsnest.schemas import DesignSpec, StrategyBundle
 
 # real KiCad 10 library symbol (verified present in Regulator_Linear.kicad_sym);
@@ -30,28 +29,6 @@ from ratsnest.schemas import DesignSpec, StrategyBundle
 # the strategy's Vref table and MPN map are built around
 REGULATOR_PART = "AP1117-ADJ"
 REGULATOR_SYMBOL = "Regulator_Linear:AP1117-ADJ"
-
-_host = None
-
-
-def _get_host(config: Config):
-    """Singleton in-process KiCADInterface from the vendored server."""
-    global _host
-    if _host is not None:
-        return _host
-    if not bootstrap_kicad(config.kicad_python):
-        raise AgentError("pcbnew unavailable — cannot host KiCad skills in-process")
-    if not config.mcp_server_dir:
-        raise AgentError("KiCAD-MCP-Server dir not found (RATSNEST_MCP_SERVER)")
-    py_dir = str(config.mcp_server_dir / "python")
-    if py_dir not in sys.path:
-        sys.path.insert(0, py_dir)
-    import importlib
-    module = importlib.import_module("kicad_interface")
-    _host = module.KiCADInterface()
-    from ratsnest.mcp_exec.hotfixes import apply_hotfixes
-    apply_hotfixes(_host, config)
-    return _host
 
 
 class KiCadSkillAgent(Agent):
@@ -67,7 +44,10 @@ class KiCadSkillAgent(Agent):
     def call(self, command: str, params: dict) -> dict:
         if command not in self.commands:
             raise AgentError(f"{self.name} does not own command {command!r}")
-        host = _get_host(self.config)
+        try:
+            host = get_host(self.config)
+        except KicadHostError as exc:
+            raise AgentError(str(exc)) from exc
         result = self.act(
             command, lambda: host.handle_command(command, params),
             action_detail={"params": {k: v for k, v in params.items()
