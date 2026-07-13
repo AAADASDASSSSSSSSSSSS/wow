@@ -12,6 +12,27 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_KICAD_CLI = Path(r"E:\KiCad\10.0\bin\kicad-cli.exe")
 
 
+def _apply_dotenv(path: Path | None = None) -> None:
+    """Load KEY=VALUE defaults from .env (repo root). Real environment
+    variables always win — docker-compose / the control plane inject vars
+    that must never be overridden. utf-8-sig tolerates PowerShell BOMs."""
+    path = path or REPO_ROOT / ".env"
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key:
+            os.environ.setdefault(key, value)
+
+
 @dataclass
 class Config:
     kicad_happy_root: Path
@@ -39,6 +60,7 @@ class Config:
 
     @classmethod
     def load(cls) -> "Config":
+        _apply_dotenv()
         kh_root = Path(
             os.environ.get(
                 "RATSNEST_KICAD_HAPPY_ROOT",
