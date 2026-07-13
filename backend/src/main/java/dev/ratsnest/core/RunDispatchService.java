@@ -11,12 +11,12 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
 
 /**
  * Run dispatch — two modes, one contract:
@@ -34,18 +34,13 @@ public class RunDispatchService {
 
     private final DesignRunRepository runs;
     private final ObjectProvider<KafkaTemplate<String, String>> kafka;
+    private final PythonBridge bridge;
 
     @Value("${ratsnest.dispatch:local}")
     private String dispatchMode;
 
     @Value("${ratsnest.topic.run-requests:ratsnest.run-requests}")
     private String runRequestTopic;
-
-    @Value("${ratsnest.python-exe:python}")
-    private String pythonExe;
-
-    @Value("${ratsnest.agent-runtime-dir:.}")
-    private String agentRuntimeDir;
 
     @Value("${ratsnest.self-url:http://localhost:8080}")
     private String selfUrl;
@@ -54,9 +49,11 @@ public class RunDispatchService {
     private String serviceToken;
 
     public RunDispatchService(DesignRunRepository runs,
-                              ObjectProvider<KafkaTemplate<String, String>> kafka) {
+                              ObjectProvider<KafkaTemplate<String, String>> kafka,
+                              PythonBridge bridge) {
         this.runs = runs;
         this.kafka = kafka;
+        this.bridge = bridge;
     }
 
     @Async
@@ -97,41 +94,36 @@ public class RunDispatchService {
         try {
             List<String> cmd = new ArrayList<>();
             if ("design".equals(run.getKind())) {
-                cmd.addAll(List.of(pythonExe, "-m", "ratsnest", "design",
-                        run.getRequirement(), "--out", run.getProjectDir()));
+                cmd.addAll(List.of("design", run.getRequirement(),
+                        "--out", run.getProjectDir()));
                 String backend = run.getBackend() == null ? "template"
                         : run.getBackend();
                 cmd.addAll(List.of("--backend", backend));
             } else {
-                cmd.addAll(List.of(pythonExe, "-m", "ratsnest", "fix",
-                        run.getProjectDir()));
+                cmd.addAll(List.of("fix", run.getProjectDir()));
             }
             cmd.addAll(List.of("--max-iter", String.valueOf(run.getMaxIterations()),
                     "--no-erc", "--json"));
-            ProcessBuilder pb = new ProcessBuilder(cmd)
-                    .directory(new File(agentRuntimeDir))
-                    .redirectErrorStream(false);
-            pb.environment().put("RATSNEST_CONTROL_PLANE_URL", selfUrl);
+
+            Map<String, String> env = new HashMap<>();
+            env.put("RATSNEST_CONTROL_PLANE_URL", selfUrl);
             if (serviceToken != null && !serviceToken.isBlank()) {
-                pb.environment().put("RATSNEST_SERVICE_TOKEN", serviceToken);
+                env.put("RATSNEST_SERVICE_TOKEN", serviceToken);
             }
 
             run.setStatus("running");
             runs.save(run);
 
-            Process proc = pb.start();
-            String stdout = new String(proc.getInputStream().readAllBytes(),
-                    StandardCharsets.UTF_8);
-            String stderr = new String(proc.getErrorStream().readAllBytes(),
-                    StandardCharsets.UTF_8);
-            boolean finished = proc.waitFor(15, TimeUnit.MINUTES);
+            PythonBridge.BridgeResult result =
+                    bridge.run(cmd, Duration.ofMinutes(15), env);
 
-            if (!finished || stdout.isBlank()) {
+            if (!result.finished() || result.stdout().isBlank()) {
                 run.setStatus("failed");
                 log.error("run {} produced no output; stderr: {}", run.getId(),
-                        stderr.substring(0, Math.min(500, stderr.length())));
+                        result.stderr().substring(0,
+                                Math.min(500, result.stderr().length())));
             } else {
-                applyResult(run, stdout);
+                applyResult(run, result.stdout());
             }
         } catch (Exception e) {
             log.error("dispatch failed for run {}", run.getId(), e);

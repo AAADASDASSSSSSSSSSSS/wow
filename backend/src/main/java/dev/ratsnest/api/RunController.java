@@ -3,6 +3,7 @@ package dev.ratsnest.api;
 import dev.ratsnest.core.DesignRun;
 import dev.ratsnest.core.DesignRunRepository;
 import dev.ratsnest.core.RunDispatchService;
+import dev.ratsnest.security.RunAccessPolicy;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.PageRequest;
@@ -11,7 +12,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -54,10 +54,13 @@ public class RunController {
 
     private final DesignRunRepository runs;
     private final RunDispatchService dispatch;
+    private final RunAccessPolicy access;
 
-    public RunController(DesignRunRepository runs, RunDispatchService dispatch) {
+    public RunController(DesignRunRepository runs, RunDispatchService dispatch,
+                         RunAccessPolicy access) {
         this.runs = runs;
         this.dispatch = dispatch;
+        this.access = access;
     }
 
     // -- create ---------------------------------------------------------------
@@ -67,7 +70,7 @@ public class RunController {
             @jakarta.validation.Valid @RequestBody CreateRunRequest req) {
         int maxIter = req.maxIterations() == null ? 4 : req.maxIterations();
         DesignRun run = DesignRun.create(req.projectDir(), maxIter);
-        run.setOwner(currentUser());
+        run.setOwner(access.currentUser());
         runs.save(run);
         dispatch.dispatch(run.getId());
         return ResponseEntity.status(HttpStatus.ACCEPTED)
@@ -89,7 +92,7 @@ public class RunController {
                 + "/ratsnest-designs/" + UUID.randomUUID();
         DesignRun run = DesignRun.createDesign(
                 req.requirement(), projectDir, maxIter, backend);
-        run.setOwner(currentUser());
+        run.setOwner(access.currentUser());
         runs.save(run);
         dispatch.dispatch(run.getId());
         return ResponseEntity.status(HttpStatus.ACCEPTED)
@@ -123,8 +126,8 @@ public class RunController {
         PageRequest pr = PageRequest.of(Math.max(0, page),
                 Math.min(Math.max(1, size), 200),
                 Sort.by(Sort.Direction.DESC, "createdAt"));
-        String user = currentUser();
-        if (user == null || currentIsAdmin()) {
+        String user = access.currentUser();
+        if (user == null || access.currentIsAdmin()) {
             return runs.findAll(pr).getContent();       // open mode / admin
         }
         return runs.findByOwner(user, pr).getContent(); // scoped to owner
@@ -133,7 +136,7 @@ public class RunController {
     @GetMapping("/runs/{id}")
     public ResponseEntity<DesignRun> get(@PathVariable String id) {
         return runs.findById(id)
-                .filter(this::canAccess)
+                .filter(access::canAccess)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -143,7 +146,7 @@ public class RunController {
      *  (Cluster/kafka mode moves this behind artifact storage — Phase 3.) */
     @GetMapping("/runs/{id}/download")
     public ResponseEntity<Resource> download(@PathVariable String id) {
-        DesignRun run = runs.findById(id).filter(this::canAccess)
+        DesignRun run = runs.findById(id).filter(access::canAccess)
                 .orElse(null);
         if (run == null || run.getProjectDir() == null) {
             return ResponseEntity.notFound().build();
@@ -170,7 +173,7 @@ public class RunController {
     @GetMapping("/runs/{id}/preview/{which}")
     public ResponseEntity<Resource> preview(@PathVariable String id,
                                             @PathVariable String which) {
-        DesignRun run = runs.findById(id).filter(this::canAccess)
+        DesignRun run = runs.findById(id).filter(access::canAccess)
                 .orElse(null);
         if (run == null || run.getProjectDir() == null
                 || !which.matches("sch|pcb|step_[A-Za-z0-9_\\-]{1,60}")) {
@@ -196,7 +199,7 @@ public class RunController {
     /** Execution timeline frames available for a run, in step order. */
     @GetMapping("/runs/{id}/steps")
     public ResponseEntity<List<String>> steps(@PathVariable String id) {
-        DesignRun run = runs.findById(id).filter(this::canAccess).orElse(null);
+        DesignRun run = runs.findById(id).filter(access::canAccess).orElse(null);
         if (run == null || run.getProjectDir() == null) {
             return ResponseEntity.notFound().build();
         }
@@ -219,7 +222,7 @@ public class RunController {
     /** The kicad-happy style design report (markdown). */
     @GetMapping("/runs/{id}/report")
     public ResponseEntity<String> report(@PathVariable String id) {
-        DesignRun run = runs.findById(id).filter(this::canAccess).orElse(null);
+        DesignRun run = runs.findById(id).filter(access::canAccess).orElse(null);
         if (run == null || run.getProjectDir() == null) {
             return ResponseEntity.notFound().build();
         }
@@ -236,36 +239,7 @@ public class RunController {
         }
     }
 
-    // -- helpers (read auth from the security context, not injected params) ---
-
-    private static Authentication currentAuth() {
-        return org.springframework.security.core.context.SecurityContextHolder
-                .getContext().getAuthentication();
-    }
-
-    private static String currentUser() {
-        Authentication auth = currentAuth();
-        if (auth == null || !auth.isAuthenticated()
-                || "anonymousUser".equals(auth.getName())
-                || "agent-runtime".equals(auth.getName())) {
-            return null;
-        }
-        return auth.getName();
-    }
-
-    private static boolean currentIsAdmin() {
-        Authentication auth = currentAuth();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().contains("ADMIN")
-                        || a.getAuthority().contains("SERVICE"));
-    }
-
-    private boolean canAccess(DesignRun run) {
-        if (run.getOwner() == null) {
-            return true;                 // open mode / legacy rows
-        }
-        return currentIsAdmin() || run.getOwner().equals(currentUser());
-    }
+    // -- helpers ----------------------------------------------------------------
 
     private static byte[] zipDirectory(Path dir) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
