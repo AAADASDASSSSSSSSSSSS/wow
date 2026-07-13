@@ -45,7 +45,7 @@ public class EdaController {
     @GetMapping("/runs/{id}/eda")
     public ResponseEntity<String> state(@PathVariable String id)
             throws Exception {
-        return bridge(id, null);
+        return runEda(id, null);
     }
 
     @PostMapping("/runs/{id}/eda")
@@ -55,10 +55,10 @@ public class EdaController {
         if (opsJson == null || opsJson.length() > 100_000) {
             return ResponseEntity.badRequest().build();
         }
-        return bridge(id, opsJson);
+        return runEda(id, opsJson);
     }
 
-    private ResponseEntity<String> bridge(String id, String opsJson)
+    private ResponseEntity<String> runEda(String id, String opsJson)
             throws Exception {
         DesignRun run = runs.findById(id).orElse(null);
         if (run == null || run.getProjectDir() == null

@@ -38,6 +38,10 @@ public class PythonBridge {
                 .redirectErrorStream(false);
         pb.environment().putAll(extraEnv);
         Process proc = pb.start();
+        // Bounded-output contract: the ratsnest CLI emits a small JSON result
+        // on stdout and modest diagnostics on stderr, so draining stdout fully
+        // then stderr cannot deadlock here. A future streaming/high-volume
+        // caller would need a per-stream reader thread instead.
         String stdout = new String(proc.getInputStream().readAllBytes(),
                 StandardCharsets.UTF_8);
         String stderr = new String(proc.getErrorStream().readAllBytes(),
