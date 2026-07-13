@@ -17,9 +17,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from ratsnest.agents.base import Agent, AgentError
+from ratsnest.circuit_math import GenerationError, REGULATOR_PART, solve_board_values
 from ratsnest.config import Config
 from ratsnest.data_proxy import Recorder
-from ratsnest.design_gen.generator import GenerationError, solve_board_values
 from ratsnest.design_gen.templates import rail_name
 from ratsnest.kicad_host import KicadHostError, get_host
 from ratsnest.schemas import DesignSpec, StrategyBundle
@@ -27,7 +27,6 @@ from ratsnest.schemas import DesignSpec, StrategyBundle
 # real KiCad 10 library symbol (verified present in Regulator_Linear.kicad_sym);
 # AP1117 datasheet pinout: ADJ=1, VOUT=2, VIN=3 — and it is already the part
 # the strategy's Vref table and MPN map are built around
-REGULATOR_PART = "AP1117-ADJ"
 REGULATOR_SYMBOL = "Regulator_Linear:AP1117-ADJ"
 
 

@@ -16,9 +16,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ratsnest.circuit_math import GenerationError, solve_board_values
 from ratsnest.config import Config
 from ratsnest.data_proxy import Recorder
-from ratsnest.design_gen.generator import GenerationError, solve_board_values
 from ratsnest.design_gen.templates import rail_name
 from ratsnest.mcp_exec.client import McpClient
 from ratsnest.schemas import DesignSpec, StrategyBundle

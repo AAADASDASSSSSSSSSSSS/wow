@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import re
 
+from ratsnest.circuit_math import format_ohms, resistor_mpn, snap_e_series
 from ratsnest.config import Config
-from ratsnest.khlib import load_kh_module
 from ratsnest.schemas import (
     EvaluationResult,
     Finding,
@@ -21,44 +21,6 @@ from ratsnest.schemas import (
     RepairOpType,
     StrategyBundle,
 )
-
-
-def format_ohms(value: float) -> str:
-    """3000 -> '3k', 4700 -> '4.7k', 330 -> '330', 1_500_000 -> '1.5M'."""
-    for factor, suffix in ((1e6, "M"), (1e3, "k")):
-        if value >= factor:
-            v = value / factor
-            s = f"{v:.2f}".rstrip("0").rstrip(".")
-            return f"{s}{suffix}"
-    s = f"{value:.2f}".rstrip("0").rstrip(".")
-    return s
-
-
-def _snap(config: Config, ideal: float, series: str) -> float:
-    utils = load_kh_module("kicad_utils", config.kicad_scripts)
-    snapped, _err = utils.snap_to_e_series(ideal, series)
-    return float(snapped)
-
-
-def resistor_mpn(strategy: StrategyBundle, value_str: str) -> str:
-    """Curated MPN for a resistor value: explicit map first, else the
-    strategy's Yageo-style pattern (3k->3K, 1.6k->1K6, 330->330R)."""
-    mpn_map: dict = strategy.solver_params.get("mpn_map", {})
-    if value_str in mpn_map:
-        return str(mpn_map[value_str])
-    pattern = strategy.solver_params.get(
-        "resistor_mpn_pattern", "RC0805FR-07{code}L")
-    if value_str.endswith(("k", "M")):
-        suffix = value_str[-1].upper()
-        body = value_str[:-1]
-        if "." in body:
-            whole, frac = body.split(".")
-            code = f"{whole}{suffix}{frac}"
-        else:
-            code = f"{body}{suffix}"
-    else:
-        code = f"{value_str}R"
-    return pattern.format(code=code)
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +38,7 @@ def _solve_feedback_divider(f: Finding, mapping: RepairMapping,
     series = str(mapping.params.get("e_series", "E24"))
     # keep r_bottom, solve r_top: Vout = Vref * (1 + Rt/Rb)
     ideal = r_bot["ohms"] * (target / vref - 1.0)
-    snapped = _snap(config, ideal, series)
+    snapped = snap_e_series(config, ideal, series)
     new_value = format_ohms(snapped)
     achieved = vref * (1 + snapped / r_bot["ohms"])
     op = RepairOp(op=RepairOpType.set_value, ref=r_top["ref"],
@@ -102,9 +64,9 @@ def _solve_led_resistor(f: Finding, mapping: RepairMapping,
         return [], "non-positive target current"
     series = str(mapping.params.get("e_series", "E24"))
     ideal = (vrail - vf) / i_target
-    snapped = _snap(config, ideal, series)
+    snapped = snap_e_series(config, ideal, series)
     if snapped < ideal:  # never snap below: current must not exceed target
-        snapped = _snap(config, ideal * 1.1, series)
+        snapped = snap_e_series(config, ideal * 1.1, series)
     ref = fp["component"]
     new_value = format_ohms(snapped)
     op = RepairOp(op=RepairOpType.set_value, ref=ref,

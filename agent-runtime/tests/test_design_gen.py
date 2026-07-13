@@ -3,9 +3,9 @@
 import pytest
 
 from ratsnest.agents import synthesize
+from ratsnest.circuit_math import GenerationError
 from ratsnest.config import Config
 from ratsnest.design_gen import generate_project, parse_requirement
-from ratsnest.design_gen.generator import GenerationError
 from ratsnest.design_gen.templates import rail_name
 from ratsnest.evolution import StrategyRegistry
 from ratsnest.kh_adapter import KicadHappyAdapter
