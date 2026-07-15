@@ -23,6 +23,22 @@ from ratsnest.reporting import write_report
 from ratsnest.schemas import DesignSpec, EvaluationResult, RunRecord, StrategyBundle
 
 
+def evaluate_for_release(project_dir: Path, strategy: StrategyBundle,
+                         config: Config) -> EvaluationResult:
+    """Re-run analyzers and every production gate for final artifacts."""
+    from ratsnest.agents import synthesize
+    from ratsnest.kh_adapter import KicadHappyAdapter
+    from ratsnest.verification import verify_production
+
+    project_dir = Path(project_dir)
+    gates, gate_findings = verify_production(project_dir, config)
+    erc_gate = gates.get("erc")
+    return synthesize(
+        KicadHappyAdapter(config).analyze_all(project_dir), strategy,
+        project_dir, erc_passed=(erc_gate.passed if erc_gate else None),
+        gate_results=gates, additional_findings=gate_findings)
+
+
 def _template_backend(config, recorder, llm) -> DesignBackend:
     from ratsnest.design_gen.generator import TemplateBackend
     return TemplateBackend(config)
@@ -61,7 +77,7 @@ def generate_for_backend(requirement: str, out_dir: Path, backend: str,
     if backend not in VALID_BACKENDS:
         raise ValueError(f"backend must be one of {VALID_BACKENDS}, got {backend!r}")
 
-    if llm is None and recorder is not None:
+    if llm is None:
         from ratsnest.llm import LlmClient
         llm = LlmClient(config, recorder)
     spec = None

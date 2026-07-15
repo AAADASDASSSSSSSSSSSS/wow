@@ -15,7 +15,8 @@ export function isTerminal(status?: string | null): boolean {
     status === "converged" ||
     status === "escalated" ||
     status === "suggested" ||
-    status === "failed"
+    status === "failed" ||
+    status === "plan_rejected"
   );
 }
 

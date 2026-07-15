@@ -1,8 +1,8 @@
 package dev.ratsnest.security;
 
 import dev.ratsnest.core.DesignRun;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import dev.ratsnest.tenant.TenantAccessService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,32 +13,42 @@ import org.springframework.stereotype.Component;
 @Component
 public class RunAccessPolicy {
 
-    private static Authentication currentAuth() {
-        return SecurityContextHolder.getContext().getAuthentication();
+    private final TenantAccessService tenants;
+
+    @Value("${ratsnest.security.mode:open}")
+    private String securityMode;
+
+    public RunAccessPolicy(TenantAccessService tenants) {
+        this.tenants = tenants;
     }
 
     /** Logged-in username, or null for anonymous / service callers. */
     public String currentUser() {
-        Authentication auth = currentAuth();
-        if (auth == null || !auth.isAuthenticated()
-                || "anonymousUser".equals(auth.getName())
-                || "agent-runtime".equals(auth.getName())) {
-            return null;
-        }
-        return auth.getName();
+        return tenants.currentUsername();
     }
 
     public boolean currentIsAdmin() {
-        Authentication auth = currentAuth();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().contains("ADMIN")
-                        || a.getAuthority().contains("SERVICE"));
+        return tenants.currentIsPlatformAdmin() || tenants.currentIsService();
     }
 
     public boolean canAccess(DesignRun run) {
+        if (run.getOrganizationId() != null) {
+            return tenants.canAccessOrganization(run.getOrganizationId());
+        }
         if (run.getOwner() == null) {
             return true;                 // open mode / legacy rows
         }
         return currentIsAdmin() || run.getOwner().equals(currentUser());
+    }
+
+    public boolean canApprove(DesignRun run) {
+        if ("open".equalsIgnoreCase(securityMode) && currentUser() == null) {
+            return true;
+        }
+        if (run.getOrganizationId() != null) {
+            return tenants.canApproveOrganization(run.getOrganizationId());
+        }
+        return currentIsAdmin() || (run.getOwner() != null
+                && run.getOwner().equals(currentUser()));
     }
 }

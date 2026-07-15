@@ -37,15 +37,25 @@ def _solve_feedback_divider(f: Finding, mapping: RepairMapping,
     if not (r_top.get("ohms") and r_bot.get("ohms") and vref and target):
         return [], "missing divider payload"
     series = str(mapping.params.get("e_series", "E24"))
-    # keep r_bottom, solve r_top: Vout = Vref * (1 + Rt/Rb)
-    ideal = r_bot["ohms"] * (target / vref - 1.0)
-    snapped = snap_e_series(config, ideal, series)
+    if extra.get("divider_orientation") == "output_adjust_adjust_ground":
+        # TLV1117: retain R1 (VOUT-to-ADJ) and solve R2 (ADJ-to-ground),
+        # including the catalog-qualified 80uA adjust-pin current estimate.
+        adjust_current = 80e-6
+        ideal = (target - vref) / (vref / r_top["ohms"] + adjust_current)
+        snapped = snap_e_series(config, ideal, series)
+        achieved = vref * (1 + snapped / r_top["ohms"]) + adjust_current * snapped
+        target_resistor = r_bot
+    else:
+        # Ground-referenced FB divider: retain bottom and solve upper.
+        ideal = r_bot["ohms"] * (target / vref - 1.0)
+        snapped = snap_e_series(config, ideal, series)
+        achieved = vref * (1 + snapped / r_bot["ohms"])
+        target_resistor = r_top
     new_value = format_ohms(snapped)
-    achieved = vref * (1 + snapped / r_bot["ohms"])
-    op = RepairOp(op=RepairOpType.set_value, ref=r_top["ref"],
+    op = RepairOp(op=RepairOpType.set_value, ref=target_resistor["ref"],
                   params={"value": new_value}, finding_id=f.finding_id())
-    ctx.setdefault("planned_values", {})[r_top["ref"]] = new_value
-    return [op], (f"set {r_top['ref']}={new_value} ({series} snap of "
+    ctx.setdefault("planned_values", {})[target_resistor["ref"]] = new_value
+    return [op], (f"set {target_resistor['ref']}={new_value} ({series} snap of "
                   f"{ideal:.1f}Ω) -> Vout {achieved:.3g}V vs target {target}V")
 
 
@@ -141,7 +151,7 @@ Return ONLY JSON:
 def _reason_about_repairs(hints: list[RepairHint], findings: list[Finding],
                           llm) -> dict | None:
     """Brain path. Returns validated decision or None (keep all hints)."""
-    if llm is None or not llm.available or not hints:
+    if llm is None or not hints:
         return None
     import json as _json
     payload = {

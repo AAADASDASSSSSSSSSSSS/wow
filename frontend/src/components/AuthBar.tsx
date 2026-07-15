@@ -44,7 +44,7 @@ export function AuthBar({
   }
 
   return (
-    <div className="fixed right-4 top-4 z-50">
+    <div className="fixed right-4 top-14 z-50 sm:top-4">
       {user ? (
         <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[#101010]/90 px-3 py-1.5 text-xs text-gray-300 backdrop-blur">
           <User size={14} className="text-primary" />

@@ -26,7 +26,8 @@ except ImportError:  # httpx is optional; JSONL sink always works
 class Recorder:
     def __init__(self, run_dir: Path, run_id: str,
                  control_plane_url: str | None = None,
-                 base_metadata: dict[str, Any] | None = None):
+                 base_metadata: dict[str, Any] | None = None,
+                 initial_step: int = 0):
         self.run_dir = Path(run_dir)
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.run_id = run_id
@@ -34,7 +35,19 @@ class Recorder:
         self.control_plane_url = control_plane_url
         # run-level provenance (strategy version etc.) stamped on every event
         self.base_metadata = base_metadata or {}
-        self._step = 0
+        self._step = max(0, int(initial_step))
+        if self.path.is_file():
+            try:
+                for line in self.path.read_text(encoding="utf-8").splitlines():
+                    self._step = max(
+                        self._step, int(json.loads(line).get("step", 0)))
+            except (OSError, ValueError, json.JSONDecodeError):
+                # A damaged local mirror must not disable the remote trajectory.
+                pass
+
+    @property
+    def step(self) -> int:
+        return self._step
 
     def emit(self, node: str, iteration: int = 0,
              observation: dict[str, Any] | None = None,

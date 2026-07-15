@@ -4,13 +4,12 @@ Architecture invariant: the LLM PROPOSES, tools EXECUTE, checkers VERIFY,
 AHE evolves, the control plane governs. These protocols are the load-bearing
 contracts of that sentence:
 
-  LlmBrain       what a stateless agent seam needs from its brain. Four of
-                 the five seams (requirement agent, creator foreman, repair
-                 reasoner, evolution proposer) depend only on this contract,
-                 never on a concrete client. The orchestrator loop is the
-                 exception: it also mutates a per-iteration counter
-                 (`llm.iteration`) outside this surface, so it is deliberately
-                 NOT typed against LlmBrain.
+  LlmBrain       what an agent needs from its brain. RequirementAgent,
+                 CircuitArchitect, SchematicDesigner, PcbDesigner,
+                 RepairAgent, repair reasoning, and EvolutionAgent depend on
+                 this interface rather than a provider-specific client. The
+                 closed repair loop additionally advances the concrete
+                 client's iteration counter for trajectory metadata.
   DesignBackend  a thing that turns a DesignSpec into a KiCad project
                  (template writer, creator crew, MCP executor).
 

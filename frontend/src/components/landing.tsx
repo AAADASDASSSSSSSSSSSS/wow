@@ -132,9 +132,7 @@ function AnimatedLetter({
   const opacity = useTransform(progress, [start, end], [0.22, 1]);
 
   return (
-    <motion.span style={{ opacity }}>
-      {char === " " ? "\u00A0" : char}
-    </motion.span>
+    <motion.span style={{ opacity }}>{char}</motion.span>
   );
 }
 
@@ -144,22 +142,32 @@ function ScrollRevealText({ text }: { text: string }) {
     target: ref,
     offset: ["start 0.85", "end 0.25"]
   });
-  const chars = Array.from(text);
+  const words = text.split(" ");
+  const totalChars = Array.from(text).length;
+  let charOffset = 0;
 
   return (
     <p
       ref={ref}
-      className="mx-auto mt-8 max-w-3xl text-center text-xs leading-relaxed text-primary sm:text-sm md:text-base"
+      className="mx-auto mt-8 flex max-w-3xl flex-wrap justify-center gap-x-[0.25em] text-center text-xs leading-relaxed text-primary sm:text-sm md:text-base"
     >
-      {chars.map((char, index) => (
-        <AnimatedLetter
-          char={char}
-          index={index}
-          key={`${char}-${index}`}
-          progress={scrollYProgress}
-          total={chars.length}
-        />
-      ))}
+      {words.map((word, wordIndex) => {
+        const start = charOffset;
+        charOffset += word.length + 1;
+        return (
+          <span className="inline-block" key={`${word}-${wordIndex}`}>
+            {Array.from(word).map((char, charIndex) => (
+              <AnimatedLetter
+                char={char}
+                index={start + charIndex}
+                key={`${char}-${charIndex}`}
+                progress={scrollYProgress}
+                total={totalChars}
+              />
+            ))}
+          </span>
+        );
+      })}
     </p>
   );
 }
@@ -244,26 +252,26 @@ export function Hero({
           </nav>
         </div>
 
-        <div className="absolute left-4 top-16 z-10 sm:left-6 md:left-8">
+        <div className="absolute left-4 top-24 z-10 sm:left-6 sm:top-16 md:left-8">
           <HealthPill health={health} healthError={healthError} />
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 z-10 px-4 pb-5 sm:px-6 md:px-8 md:pb-7">
-          <div className="grid items-end gap-6 lg:grid-cols-12">
-            <div className="lg:col-span-8">
+          <div className="grid min-w-0 items-end gap-6 lg:grid-cols-12">
+            <div className="min-w-0 lg:col-span-8">
               <h1
-                className="text-[18vw] font-medium leading-[0.85] tracking-[-0.06em] sm:text-[17vw] md:text-[15vw] lg:text-[11.5vw] xl:text-[11.6vw] 2xl:text-[12vw]"
+                className="max-w-full pr-5 text-[64px] font-medium leading-[0.85] tracking-[0] sm:text-[96px] md:text-[120px] lg:text-[150px] xl:text-[176px] 2xl:text-[196px]"
                 style={{ color: primaryText }}
               >
                 <WordsPullUp text="RatsNest" showAsterisk />
               </h1>
             </div>
-            <div className="pb-2 lg:col-span-4 lg:pb-8">
+            <div className="min-w-0 max-w-full overflow-hidden pb-2 lg:col-span-4 lg:pb-8">
               <motion.p
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.5, duration: 0.8, ease: easeOut }}
-                className="max-w-lg text-xs leading-[1.25] text-primary/70 sm:text-sm md:text-base"
+                className="w-[calc(100vw-4rem)] max-w-full break-words text-xs leading-[1.25] text-primary/70 sm:w-auto sm:max-w-lg sm:text-sm md:text-base"
               >
                 Auto-evolving multi-agent control plane for KiCad design
                 review, repair, and strategy evolution. It closes the loop

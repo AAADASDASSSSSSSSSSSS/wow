@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ratsnest.circuit_math import solve_board_values
+from ratsnest.circuit_math import LDO_TOPOLOGY, GenerationError, solve_circuit
 from ratsnest.config import Config
 from ratsnest.design_gen.templates import build_regulator_board, rail_name
 from ratsnest.schemas import DesignSpec, StrategyBundle
@@ -22,7 +22,13 @@ def generate_project(spec: DesignSpec, out_dir: Path,
                      config: Config | None = None) -> Path:
     """Write <out_dir>/<project>.kicad_sch + .kicad_pro (+ designspec.json)."""
     config = config or Config.load()
-    values, mpns, include_led = solve_board_values(spec, strategy, config)
+    solved = solve_circuit(spec, strategy, config)
+    if solved.topology != LDO_TOPOLOGY:
+        raise GenerationError(
+            "template backend is limited to the LDO development schematic; "
+            "use the crew backend for Buck or production verification")
+    values, mpns, include_led = (
+        solved.values, solved.mpns, solved.include_led)
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

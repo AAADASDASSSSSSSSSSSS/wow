@@ -1,6 +1,6 @@
 # RatsNest deployment — run everything in containers, no host Python/Java needed.
 #
-#   cd E:\agent-service-toolkit-main\kicad-happy-main   (context = dir with both repos)
+#   cd <directory-containing-RatsNest-and-kicad-happy-main>
 #   docker compose -f RatsNest/infra/docker-compose.yml build
 #   docker compose -f RatsNest/infra/docker-compose.yml run --rm tests      # full pytest suite
 #   docker compose -f RatsNest/infra/docker-compose.yml run --rm fix-demo   # closed-loop demo
@@ -54,6 +54,7 @@ services:
       RATSNEST_PYTHON_EXE: python
       RATSNEST_AGENT_RUNTIME_DIR: /repo/RatsNest/agent-runtime
       RATSNEST_SELF_URL: http://backend:8080
+      RATSNEST_ARTIFACT_ROOT: /app/data/artifacts
     volumes:
       - backend-data:/app/data
 
@@ -113,6 +114,9 @@ services:
       # override BOTH in production (docker compose --env-file or secrets)
       RATSNEST_JWT_SECRET: ${RATSNEST_JWT_SECRET:-cluster-demo-secret-0123456789abcdef00}
       RATSNEST_SERVICE_TOKEN: ${RATSNEST_SERVICE_TOKEN:-cluster-demo-service-token}
+      RATSNEST_ARTIFACT_ROOT: /app/data/artifacts
+    volumes:
+      - backend-cluster-data:/app/data
 
   worker:
     image: ratsnest-runtime
@@ -128,5 +132,6 @@ services:
 
 volumes:
   backend-data:
+  backend-cluster-data:
   pg-data:
   worker-projects:

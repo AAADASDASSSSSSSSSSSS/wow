@@ -17,6 +17,7 @@ EXPORTED = [
     models.Finding,
     models.AnalyzerOutput,
     models.DesignSpec,
+    models.VerificationGate,
     models.Scorecard,
     models.EvaluationResult,
     models.RepairOp,

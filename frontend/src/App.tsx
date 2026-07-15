@@ -70,7 +70,7 @@ export default function App() {
           </div>
         </div>
       </section>
-      <ConsoleSection />
+      <ConsoleSection user={user} />
       <footer className="border-t border-white/10 bg-black px-4 py-8 text-center text-xs text-gray-600 sm:px-6">
         RatsNest control plane / KiCad design review, repair, and strategy evolution
       </footer>

@@ -13,17 +13,21 @@ import { EdaPanel } from "./EdaPanel";
 import { PreviewPanel } from "./PreviewPanel";
 import { ReportPanel } from "./ReportPanel";
 import { TimelinePanel } from "./TimelinePanel";
+import { ApprovalPanel } from "./ApprovalPanel";
+import { VerificationGates } from "./VerificationGates";
 
 export function RunDetail({
   events,
   iterations,
   recordEscalation,
-  run
+  run,
+  onRunChanged
 }: {
   events: AtdpEvent[];
   iterations: NonNullable<ReturnType<typeof parseRunRecord>>["iterations"];
   recordEscalation?: unknown;
   run: DesignRun | null;
+  onRunChanged: () => void;
 }) {
   if (!run) {
     return (
@@ -40,6 +44,9 @@ export function RunDetail({
       iteration: iteration.iteration,
       why
     }))
+  );
+  const hasDesignOutput = ["converged", "escalated", "suggested"].includes(
+    run.status
   );
 
   return (
@@ -74,7 +81,8 @@ export function RunDetail({
             {run.pythonRunId ?? "-"}
           </p>
         </div>
-        {isTerminal(run.status) ? (
+        {hasDesignOutput &&
+        (!run.releaseStatus || run.releaseStatus === "approved") ? (
           <a
             className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition hover:bg-primary/20"
             href={downloadUrl(run.id)}
@@ -83,17 +91,26 @@ export function RunDetail({
             Download KiCad project (.zip)
           </a>
         ) : null}
+        {run.failureMessage ? (
+          <p className="mt-4 rounded-md border border-red-300/20 bg-red-300/10 p-3 text-sm text-red-100">
+            {run.failureMessage}
+          </p>
+        ) : null}
       </div>
+
+      <ApprovalPanel run={run} onChanged={onRunChanged} />
+
+      <VerificationGates iterations={iterations ?? []} />
 
       {run.kind === "design" ? (
         <TimelinePanel live={!isTerminal(run.status)} runId={run.id} />
       ) : null}
 
-      {run.kind === "design" && isTerminal(run.status) ? (
+      {run.kind === "design" && hasDesignOutput ? (
         <EdaPanel runId={run.id} />
       ) : null}
 
-      {run.kind === "design" && isTerminal(run.status) ? (
+      {run.kind === "design" && hasDesignOutput ? (
         <PreviewPanel runId={run.id} />
       ) : null}
 

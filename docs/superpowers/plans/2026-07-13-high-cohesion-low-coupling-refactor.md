@@ -10,10 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-13-high-cohesion-low-coupling-refactor-design.md`
 
-**Environment notes (critical on this machine):**
-- Run all commands from repo root `E:\agent-service-toolkit-main\kicad-happy-main\RatsNest` unless stated.
+**Environment notes:**
+- Run all commands from `<repo-root>` unless stated.
 - Python tests: `cd agent-runtime` then `..\.venv\Scripts\python.exe -m pytest tests -q` (venv shares KiCad's interpreter). If `.venv` is elsewhere, use the interpreter the project already uses — check `agent-runtime/.venv` first, then repo-root `.venv`.
-- Java build needs `$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.2.8-hotspot"`.
+- Java build needs Java 17 and `JAVA_HOME` set to that JDK.
 - Never spawn visible console windows: all Python `subprocess.run` calls already pass `creationflags=NO_WINDOW` — preserve that in any code you touch.
 - Console is GBK: never print non-ASCII in test output.
 
@@ -995,7 +995,7 @@ RATSNEST_LLM=auto
 
 # -- optional overrides -------------------------------------------------
 #RATSNEST_LLM_BASE_URL=          # custom endpoint (any provider)
-#RATSNEST_KICAD_CLI=E:\KiCad\10.0\bin\kicad-cli.exe
+#RATSNEST_KICAD_CLI=/path/to/kicad-cli
 ```
 
 - [ ] **Step 6.6: Add `.env` to `.gitignore`** (append the line `.env` to the repo-root `.gitignore`).

@@ -1,6 +1,7 @@
 package dev.ratsnest.auth;
 
 import dev.ratsnest.security.JwtService;
+import dev.ratsnest.tenant.TenantProvisioningService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -25,16 +26,24 @@ public class AuthController {
     private final UserAccountRepository users;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final TenantProvisioningService provisioning;
+
+    @org.springframework.beans.factory.annotation.Value(
+            "${ratsnest.security.cookie-secure:false}")
+    private boolean secureCookie;
 
     public AuthController(UserAccountRepository users,
                           PasswordEncoder passwordEncoder,
-                          JwtService jwtService) {
+                          JwtService jwtService,
+                          TenantProvisioningService provisioning) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.provisioning = provisioning;
     }
 
     @PostMapping("/register")
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<Map<String, String>> register(
             @Valid @RequestBody Credentials creds) {
         if (users.existsByUsername(creds.username())) {
@@ -42,10 +51,14 @@ public class AuthController {
                     .body(Map.of("error", "username already taken"));
         }
         String role = users.count() == 0 ? "ADMIN" : "USER"; // first user = admin
-        users.save(UserAccount.create(
+        UserAccount user = users.save(UserAccount.create(
                 creds.username(), passwordEncoder.encode(creds.password()), role));
+        var tenant = provisioning.provisionPersonalTenant(user);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Map.of("username", creds.username(), "role", role));
+                .body(Map.of("username", creds.username(), "role", role,
+                        "organizationId", tenant.organization().getId(),
+                        "workspaceId", tenant.workspace().getId(),
+                        "projectId", tenant.project().getId()));
     }
 
     @PostMapping("/login")
@@ -57,11 +70,12 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "invalid credentials"));
         }
+        provisioning.ensureTenant(user);
         String token = jwtService.issue(user.getUsername(), user.getRole());
         // HttpOnly cookie so the SPA works in jwt mode without code changes
         var cookie = org.springframework.http.ResponseCookie
                 .from(dev.ratsnest.security.CookieBearerFilter.COOKIE, token)
-                .httpOnly(true).sameSite("Lax").path("/")
+                .httpOnly(true).secure(secureCookie).sameSite("Lax").path("/")
                 .maxAge(java.time.Duration.ofHours(24)).build();
         return ResponseEntity.ok()
                 .header(org.springframework.http.HttpHeaders.SET_COOKIE,
@@ -74,7 +88,8 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> logout() {
         var cookie = org.springframework.http.ResponseCookie
                 .from(dev.ratsnest.security.CookieBearerFilter.COOKIE, "")
-                .httpOnly(true).sameSite("Lax").path("/").maxAge(0).build();
+                .httpOnly(true).secure(secureCookie).sameSite("Lax")
+                .path("/").maxAge(0).build();
         return ResponseEntity.ok()
                 .header(org.springframework.http.HttpHeaders.SET_COOKIE,
                         cookie.toString())

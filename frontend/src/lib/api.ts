@@ -4,35 +4,30 @@ import type {
   CreateRunResponse,
   DesignBackend,
   DesignRun,
-  HealthResponse
+  HealthResponse,
+  TenantContext,
+  RunApproval,
+  BoardPlan,
+  DesignPlan
 } from "./runData";
 
-const TOKEN_KEY = "ratsnest_token";
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string | null): void {
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
-}
-
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = getToken();
-  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+  return extra;
 }
 
 async function requestJson<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const method = (options.method ?? "GET").toUpperCase();
+  const headers = authHeaders(options.headers as Record<string, string>);
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    headers["X-RatsNest-Client"] = "web";
+  }
   const response = await fetch(path, {
     ...options,
-    headers: authHeaders(options.headers as Record<string, string>)
+    credentials: "same-origin",
+    headers
   });
 
   if (!response.ok) {
@@ -72,21 +67,35 @@ export function getRunEvents(id: string): Promise<AtdpEvent[]> {
 
 export function createDesignRun(
   requirement: string,
-  backend: DesignBackend
+  backend: DesignBackend,
+  projectId?: string | null
 ): Promise<CreateRunResponse> {
   return requestJson<CreateRunResponse>("/api/designs", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ requirement, backend })
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID()
+    },
+    body: JSON.stringify({ requirement, backend, projectId })
   });
 }
 
-export function createRepairRun(projectDir: string): Promise<CreateRunResponse> {
+export function createRepairRun(
+  projectDir: string,
+  projectId?: string | null
+): Promise<CreateRunResponse> {
   return requestJson<CreateRunResponse>("/api/runs", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectDir })
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID()
+    },
+    body: JSON.stringify({ projectDir, projectId })
   });
+}
+
+export function getTenantContext(): Promise<TenantContext> {
+  return requestJson<TenantContext>("/api/tenant/context");
 }
 
 // -- auth ---------------------------------------------------------------------
@@ -111,9 +120,6 @@ export async function login(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password })
   });
-  if (result.token) {
-    setToken(result.token);
-  }
   return result;
 }
 
@@ -121,12 +127,12 @@ export async function logout(): Promise<void> {
   try {
     await fetch("/api/auth/logout", {
       method: "POST",
-      headers: authHeaders()
+      credentials: "same-origin",
+      headers: authHeaders({ "X-RatsNest-Client": "web" })
     });
   } catch {
     // best effort
   }
-  setToken(null);
 }
 
 export async function getMe(): Promise<AuthResult> {
@@ -193,7 +199,72 @@ export function applyEdaOps(id: string, ops: EdaOp[]): Promise<EdaState> {
 
 export async function getReport(id: string): Promise<string | null> {
   const response = await fetch(`/api/runs/${encodeURIComponent(id)}/report`, {
+    credentials: "same-origin",
     headers: authHeaders()
   });
   return response.ok ? response.text() : null;
+}
+
+export async function getRunApproval(id: string): Promise<RunApproval | null> {
+  const response = await fetch(
+    `/api/runs/${encodeURIComponent(id)}/approval`,
+    { credentials: "same-origin", headers: authHeaders() }
+  );
+  if (response.status === 204 || response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as RunApproval;
+}
+
+export function getRunApprovals(id: string): Promise<RunApproval[]> {
+  return requestJson<RunApproval[]>(
+    `/api/runs/${encodeURIComponent(id)}/approvals`
+  );
+}
+
+export async function getDesignPlan(id: string): Promise<DesignPlan | null> {
+  const response = await fetch(
+    `/api/runs/${encodeURIComponent(id)}/plan`,
+    { credentials: "same-origin", headers: authHeaders() }
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as DesignPlan;
+}
+
+export async function getBoardPlan(id: string): Promise<BoardPlan | null> {
+  const response = await fetch(
+    `/api/runs/${encodeURIComponent(id)}/board-plan`,
+    { credentials: "same-origin", headers: authHeaders() }
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as BoardPlan;
+}
+
+export function decideRunApproval(
+  id: string,
+  type: "board_plan" | "design_release",
+  decision: "approved" | "rejected",
+  comment: string
+): Promise<RunApproval> {
+  return requestJson<RunApproval>(
+    `/api/runs/${encodeURIComponent(id)}/approvals/${encodeURIComponent(type)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision, comment })
+    }
+  );
 }

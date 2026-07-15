@@ -22,6 +22,8 @@ import java.util.List;
 public class CookieBearerFilter extends OncePerRequestFilter {
 
     public static final String COOKIE = "ratsnest_token";
+    public static final String COOKIE_AUTH_ATTRIBUTE =
+            "dev.ratsnest.security.cookie-auth";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -35,6 +37,7 @@ public class CookieBearerFilter extends OncePerRequestFilter {
                         && cookie.getValue() != null
                         && !cookie.getValue().isBlank()) {
                     String bearer = "Bearer " + cookie.getValue();
+                    request.setAttribute(COOKIE_AUTH_ATTRIBUTE, Boolean.TRUE);
                     request = new HttpServletRequestWrapper(request) {
                         @Override
                         public String getHeader(String name) {

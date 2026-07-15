@@ -3,6 +3,7 @@ import { Activity, AlertTriangle, ArrowRight, CircuitBoard, Sparkles } from "luc
 import {
   createDesignRun,
   createRepairRun,
+  getTenantContext,
   getRun,
   getRunEvents,
   listRuns
@@ -13,19 +14,22 @@ import {
   DesignRun,
   formatDate,
   parseRunRecord,
-  shortId
+  shortId,
+  TenantContext
 } from "../lib/runData";
 import { StatusBadge } from "./runShared";
 import { RunDetail } from "./RunDetail";
 
-export function ConsoleSection() {
+export function ConsoleSection({ user }: { user: string | null }) {
   const [runs, setRuns] = useState<DesignRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<DesignRun | null>(null);
   const [events, setEvents] = useState<AtdpEvent[]>([]);
   const [requirement, setRequirement] = useState("");
-  const [backend, setBackend] = useState<DesignBackend>("template");
+  const [backend, setBackend] = useState<DesignBackend>("crew");
   const [projectDir, setProjectDir] = useState("");
+  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmittingDesign, setIsSubmittingDesign] = useState(false);
   const [isSubmittingRepair, setIsSubmittingRepair] = useState(false);
@@ -44,6 +48,45 @@ export function ConsoleSection() {
   );
 
   const selectedIterations = selectedRecord?.iterations ?? [];
+
+  const projectOptions = useMemo(
+    () =>
+      (tenantContext?.organizations ?? []).flatMap((organization) =>
+        organization.workspaces.flatMap((workspace) =>
+          workspace.projects.map((project) => ({
+            id: project.id,
+            label: `${organization.name} / ${workspace.name} / ${project.name}`
+          }))
+        )
+      ),
+    [tenantContext]
+  );
+
+  useEffect(() => {
+    if (!user) {
+      setTenantContext(null);
+      setProjectId(null);
+      return;
+    }
+    let active = true;
+    getTenantContext()
+      .then((context) => {
+        if (!active) return;
+        setTenantContext(context);
+        const firstProject = context.organizations
+          .flatMap((organization) => organization.workspaces)
+          .flatMap((workspace) => workspace.projects)[0];
+        setProjectId((current) => current ?? firstProject?.id ?? null);
+      })
+      .catch((err) => {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Unable to load projects");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   const refreshRuns = useCallback(async () => {
     try {
@@ -110,7 +153,7 @@ export function ConsoleSection() {
 
     setIsSubmittingDesign(true);
     try {
-      const response = await createDesignRun(trimmed, backend);
+      const response = await createDesignRun(trimmed, backend, projectId);
       setSelectedRunId(response.runId);
       setRequirement("");
       await refreshRuns();
@@ -130,7 +173,7 @@ export function ConsoleSection() {
 
     setIsSubmittingRepair(true);
     try {
-      const response = await createRepairRun(trimmed);
+      const response = await createRepairRun(trimmed, projectId);
       setSelectedRunId(response.runId);
       setProjectDir("");
       await refreshRuns();
@@ -182,6 +225,19 @@ export function ConsoleSection() {
                   New design
                 </h3>
               </div>
+              {projectOptions.length > 0 ? (
+                <select
+                  className="mt-4 w-full rounded-md border border-white/10 bg-black/60 px-3 py-2.5 text-sm text-primary outline-none transition focus:border-primary/45"
+                  onChange={(event) => setProjectId(event.target.value)}
+                  value={projectId ?? ""}
+                >
+                  {projectOptions.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.label}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <textarea
                 className="mt-4 min-h-28 w-full resize-y rounded-md border border-white/10 bg-black/60 px-3 py-3 text-sm text-primary outline-none transition focus:border-primary/45"
                 onChange={(event) => setRequirement(event.target.value)}
@@ -218,8 +274,8 @@ export function ConsoleSection() {
                   {backend === "template"
                     ? "Deterministic S-expression writer. Fast, schematic-only."
                     : backend === "crew"
-                      ? "In-process agent crew drives real KiCad libraries — schematic + routed board."
-                      : "KiCAD-MCP-Server sub-agents over the MCP stdio transport."}
+                      ? "Autonomous Architect, Schematic, and PCB agents plan validated calls to in-process KiCad tools."
+                      : "Deterministic KiCAD-MCP-Server tools over the external MCP stdio transport."}
                 </p>
               </div>
               <button
@@ -313,6 +369,7 @@ export function ConsoleSection() {
             iterations={selectedIterations}
             recordEscalation={selectedRecord?.escalation}
             run={selectedRun}
+            onRunChanged={() => void refreshRuns()}
           />
         </div>
       </div>

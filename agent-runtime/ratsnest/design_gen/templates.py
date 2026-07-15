@@ -69,16 +69,16 @@ def lib_led() -> str:
 
 
 def lib_regulator() -> str:
-    # Adjustable LDO, AP1117-ADJ pinout: VIN(3) left, VOUT(2) right, ADJ(1) bottom
-    return f"""    (symbol "Regulator_Linear:AP1117-ADJ" (pin_names (offset 0.254)) (exclude_from_sim no) (in_bom yes) (on_board yes)
+    # Adjustable TLV1117 pinout: VIN(3), VOUT(2), ADJ(1).
+    return f"""    (symbol "Regulator_Linear:TLV1117-ADJ" (pin_names (offset 0.254)) (exclude_from_sim no) (in_bom yes) (on_board yes)
       (property "Reference" "U" (at 0 6.35 0) {FONT})
-      (property "Value" "AP1117-ADJ" (at 0 5.08 0) {FONT})
+      (property "Value" "TLV1117-ADJ" (at 0 5.08 0) {FONT})
       (property "Footprint" "" (at 0 0 0) {FONT_HIDE})
       (property "Datasheet" "~" (at 0 0 0) {FONT_HIDE})
-      (symbol "AP1117-ADJ_0_1"
+      (symbol "TLV1117-ADJ_0_1"
         (rectangle (start -7.62 3.81) (end 7.62 -3.81) (stroke (width 0.254) (type default)) (fill (type background)))
       )
-      (symbol "AP1117-ADJ_1_1"
+      (symbol "TLV1117-ADJ_1_1"
         (pin power_in line (at -7.62 0 0) (length 0) (name "VIN" {FONT}) (number "3" {FONT}))
         (pin power_out line (at 7.62 0 180) (length 0) (name "VOUT" {FONT}) (number "2" {FONT}))
         (pin input line (at 5.08 -5.08 90) (length 0) (name "ADJ" {FONT}) (number "1" {FONT}))
@@ -184,7 +184,7 @@ def build_regulator_board(
     # geometry identical to the proven demo board (see design docs):
     # U1@(100,60): VIN(92.38,60) VOUT(107.62,60) ADJ(105.08,65.08)
     placements = [
-        place("Regulator_Linear:AP1117-ADJ", "U1", values["U1"], 100, 60,
+        place("Regulator_Linear:TLV1117-ADJ", "U1", values["U1"], 100, 60,
               ["1", "2", "3"], mp("U1")),
         place("Device:R", "R1", values["R1"], 130, 63.81, ["1", "2"], mp("R1")),
         place("Device:R", "R2", values["R2"], 130, 71.43, ["1", "2"], mp("R2")),

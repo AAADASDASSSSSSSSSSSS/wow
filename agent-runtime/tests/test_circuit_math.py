@@ -27,6 +27,8 @@ def test_resistor_mpn_map_hit_then_pattern():
     assert resistor_mpn(strategy, "3k") == "EXPLICIT-3K"
     assert resistor_mpn(strategy, "1.6k") == "RC0805FR-071K6L"
     assert resistor_mpn(strategy, "330") == "RC0805FR-07330RL"
+    assert resistor_mpn(
+        strategy, "3k", "yageo.rc1206fr") == "RC1206FR-073KL"
 
 
 def test_pick_divider_raises_outside_tolerance():

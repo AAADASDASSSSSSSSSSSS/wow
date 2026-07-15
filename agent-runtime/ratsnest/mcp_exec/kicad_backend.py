@@ -16,7 +16,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ratsnest.circuit_math import GenerationError, REGULATOR_PART, solve_board_values
+from ratsnest.circuit_math import (
+    LDO_TOPOLOGY,
+    GenerationError,
+    solve_circuit,
+)
 from ratsnest.config import Config
 from ratsnest.data_proxy import Recorder
 from ratsnest.design_gen.templates import rail_name
@@ -26,7 +30,7 @@ from ratsnest.schemas import DesignSpec, StrategyBundle
 # real KiCad 10 library part (verified in Regulator_Linear.kicad_sym):
 # adjustable 1.25V regulator already covered by the strategy's Vref table.
 # AP1117 pinout: pin 1 = ADJ, pin 2 = VOUT, pin 3 = VIN
-MCP_REGULATOR_SYMBOL = "Regulator_Linear:AP1117-ADJ"
+MCP_REGULATOR_SYMBOL = "Regulator_Linear:TLV1117-ADJ"
 
 
 class KiCadMcpBackend:
@@ -53,8 +57,13 @@ class KiCadMcpBackend:
     def generate(self, spec: DesignSpec, out_dir: Path,
                  strategy: StrategyBundle) -> Path:
         out_dir = Path(out_dir).resolve()
-        values, mpns, include_led = solve_board_values(
-            spec, strategy, self.config, regulator_part=REGULATOR_PART)
+        solved = solve_circuit(spec, strategy, self.config)
+        if solved.topology != LDO_TOPOLOGY:
+            raise GenerationError(
+                "external MCP compatibility backend is limited to the LDO "
+                "development schematic; use crew for Buck production runs")
+        values, mpns, include_led = (
+            solved.values, solved.mpns, solved.include_led)
 
         vin, vout = rail_name(spec.input_voltage), rail_name(spec.output_voltage)
         # the server creates <path>/<name>.kicad_sch (no subdirectory)

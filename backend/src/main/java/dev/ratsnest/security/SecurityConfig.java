@@ -66,7 +66,8 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ServiceTokenFilter serviceTokenFilter,
                                            RateLimitFilter rateLimitFilter,
-                                           CookieBearerFilter cookieBearerFilter)
+                                           CookieBearerFilter cookieBearerFilter,
+                                           SameOriginMutationFilter sameOriginMutationFilter)
             throws Exception {
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(
@@ -81,6 +82,8 @@ public class SecurityConfig {
             http.addFilterBefore(cookieBearerFilter,
                     org.springframework.security.oauth2.server.resource.web
                             .authentication.BearerTokenAuthenticationFilter.class);
+            http.addFilterAfter(sameOriginMutationFilter,
+                    ServiceTokenFilter.class);
             http.authorizeHttpRequests(auth -> auth
                     .requestMatchers("/", "/index.html", "/login.html",
                             "/assets/**",

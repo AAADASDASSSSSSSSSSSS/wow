@@ -4,8 +4,17 @@ FakeLlm exercises the full brain path without network — validation is the
 product here: the LLM proposes, the contracts dispose.
 """
 
+import pytest
+
 from ratsnest.llm import extract_json
-from ratsnest.schemas import Finding, RepairHint, RepairOp, RepairOpType, StrategyBundle
+from ratsnest.schemas import (
+    DesignSpec,
+    Finding,
+    RepairHint,
+    RepairOp,
+    RepairOpType,
+    StrategyBundle,
+)
 
 
 class FakeLlm:
@@ -56,51 +65,142 @@ def test_requirement_agent_llm_valid_and_invalid():
     assert parse_requirement_llm("12V to 5V", off) is None
 
 
-# -- seam 2: creator foreman ---------------------------------------------------
+def test_requirement_agent_honors_required_brain_mode():
+    from ratsnest.config import Config
+    from ratsnest.design_gen.requirement_agent import parse_requirement_llm
+    from ratsnest.llm import BrainRequiredError, LlmClient
 
-def _placements():
-    return [("J1", "Connector_Generic:Conn_01x02", "Conn_01x02", 75, 60),
-            ("U1", "Regulator_Linear:AP1117-ADJ", "AP1117-ADJ", 100, 60),
-            ("R1", "Device:R", "3k", 130, 55)]
+    config = Config.load()
+    config.llm_enabled = True
+    config.llm_required = True
+    config.llm_provider = "deepseek"
+    config.llm_api_key = None
 
-
-def _crew_with(llm):
-    from ratsnest.crews.creator import CreatorCrew
-    crew = CreatorCrew.__new__(CreatorCrew)  # no KiCad host needed for this
-    crew.llm = llm
-    return crew
-
-
-def test_foreman_valid_positions_applied():
-    llm = FakeLlm({"creator_foreman": {
-        "placements": [{"ref": "J1", "x": 72, "y": 60},
-                       {"ref": "U1", "x": 95, "y": 62},
-                       {"ref": "R1", "x": 120, "y": 80}],
-        "rationale": "power flows left to right"}})
-    result = _crew_with(llm)._foreman_positions(_placements())
-    assert result is not None
-    positions, rationale = result
-    assert positions["R1"] == (120.0, 80.0)
-    assert "left to right" in rationale
+    with pytest.raises(BrainRequiredError):
+        parse_requirement_llm("12V to 5V", LlmClient(config))
 
 
-def test_foreman_contract_violations_rejected():
-    # unknown ref -> whole proposal dropped (fallback to deterministic layout)
-    llm = FakeLlm({"creator_foreman": {
-        "placements": [{"ref": "J1", "x": 72, "y": 60},
-                       {"ref": "U1", "x": 95, "y": 62},
-                       {"ref": "C9", "x": 120, "y": 80}]}})
-    assert _crew_with(llm)._foreman_positions(_placements()) is None
-    # out-of-bounds position -> dropped
-    llm2 = FakeLlm({"creator_foreman": {
-        "placements": [{"ref": "J1", "x": 5, "y": 60},
-                       {"ref": "U1", "x": 95, "y": 62},
-                       {"ref": "R1", "x": 120, "y": 80}]}})
-    assert _crew_with(llm2)._foreman_positions(_placements()) is None
-    # missing ref -> dropped
-    llm3 = FakeLlm({"creator_foreman": {
-        "placements": [{"ref": "J1", "x": 72, "y": 60}]}})
-    assert _crew_with(llm3)._foreman_positions(_placements()) is None
+def test_llm_client_routes_models_retries_and_enforces_budget(monkeypatch):
+    import ratsnest.llm as llm_module
+    from ratsnest.config import Config
+    from ratsnest.llm import BrainRequiredError, LlmClient
+
+    class Response:
+        def __init__(self, status, payload):
+            self.status_code = status
+            self._payload = payload
+            self.text = "temporary" if status != 200 else ""
+
+        def json(self):
+            return self._payload
+
+    class Httpx:
+        calls = []
+        responses = [
+            Response(500, {}),
+            Response(200, {
+                "choices": [{"message": {"content": '{"ok": true}'}}],
+                "usage": {"total_tokens": 17},
+            }),
+        ]
+
+        @classmethod
+        def post(cls, *args, **kwargs):
+            cls.calls.append(kwargs)
+            return cls.responses.pop(0)
+
+    config = Config.load()
+    config.llm_enabled = True
+    config.llm_required = False
+    config.llm_provider = "deepseek"
+    config.llm_api_key = "test-key"
+    config.llm_retries = 1
+    config.llm_max_calls = 2
+    config.llm_max_total_tokens = 100
+    config.llm_model_routes = {"circuit_architect": "deepseek-reasoner"}
+    monkeypatch.setattr(llm_module, "httpx", Httpx)
+    monkeypatch.setattr(llm_module.time, "sleep", lambda _: None)
+
+    client = LlmClient(config)
+    assert client.complete_json(
+        "circuit_architect", "system", "user") == {"ok": True}
+    assert len(Httpx.calls) == 2
+    assert Httpx.calls[-1]["json"]["model"] == "deepseek-reasoner"
+    assert client.total_tokens_used == 17
+    assert client.complete_json("repair_agent", "system", "user") is None
+
+    config.llm_required = True
+    required = LlmClient(config)
+    required.calls_used = config.llm_max_calls
+    with pytest.raises(BrainRequiredError, match="budget"):
+        required.complete_json("repair_agent", "system", "user")
+
+
+# -- seam 2: circuit architect -------------------------------------------------
+
+def _architect_inputs():
+    from ratsnest.circuit_math import solve_circuit
+    from ratsnest.config import Config
+    from ratsnest.evolution import StrategyRegistry
+
+    spec = DesignSpec(
+        project_name="architect_test", input_voltage=12,
+        output_voltage=5, output_current_a=0.5, led="red",
+        requirement_text="12V to 5V board with red LED")
+    config = Config.load()
+    strategy = StrategyRegistry(config.strategies_dir).load_active()[1]
+    solved = solve_circuit(spec, strategy, config)
+    return spec, solved, strategy
+
+
+def _canonical_plan(tmp_path):
+    from ratsnest.crews.blackboard import DesignBlackboard
+    from ratsnest.crews.design_agents import CircuitArchitect
+
+    spec, solved, strategy = _architect_inputs()
+    blackboard = DesignBlackboard(str(tmp_path / "canonical"))
+    plan = CircuitArchitect(strategy, blackboard).create_plan(spec, solved)
+    return plan
+
+
+def test_circuit_architect_accepts_bounded_llm_plan(tmp_path):
+    from ratsnest.crews.blackboard import DesignBlackboard
+    from ratsnest.crews.design_agents import CircuitArchitect
+
+    canonical = _canonical_plan(tmp_path)
+    proposal = canonical.model_dump(mode="json")
+    proposal["rationale"] = "Power flows left to right with a short FB loop"
+    llm = FakeLlm({"circuit_architect": proposal})
+    spec, solved, strategy = _architect_inputs()
+    blackboard = DesignBlackboard(str(tmp_path / "llm"))
+
+    selected = CircuitArchitect(strategy, blackboard, llm=llm).create_plan(
+        spec, solved)
+
+    assert selected.outline == canonical.outline
+    assert "short FB loop" in selected.rationale
+    assert llm.calls == ["circuit_architect"]
+    assert blackboard.state.board_plan == selected
+
+
+def test_circuit_architect_rejects_catalog_or_topology_mutation(tmp_path):
+    from ratsnest.crews.blackboard import DesignBlackboard
+    from ratsnest.crews.design_agents import CircuitArchitect
+
+    canonical = _canonical_plan(tmp_path)
+    proposal = canonical.model_dump(mode="json")
+    proposal["components"][0]["value"] = "LLM invented part"
+    proposal["topology"] = "boost_converter"
+    llm = FakeLlm({"circuit_architect": proposal})
+    spec, solved, strategy = _architect_inputs()
+    blackboard = DesignBlackboard(str(tmp_path / "fallback"))
+
+    selected = CircuitArchitect(strategy, blackboard, llm=llm).create_plan(
+        spec, solved)
+
+    assert selected.topology == canonical.topology
+    assert selected.components == canonical.components
+    assert selected.rationale == canonical.rationale
 
 
 # -- seam 3: repair reasoning ---------------------------------------------------
@@ -144,6 +244,14 @@ def test_evolution_proposer_bounded_diff():
     llm = FakeLlm({"evolution_agent": {
         "vref_table_add": {"LM1117": 1.25, "EVIL": 99.0},
         "weight_updates": {"warning": 5, "error": 9999},
+        "prompt_updates": {
+            "circuit_architect": "Prefer compact power flow while preserving every contract.",
+            "untrusted_agent": "This policy must never be installed."},
+        "tool_policy_updates": {
+            "schematic_designer": {
+                "max_steps": 6, "max_actions_per_step": 10},
+            "pcb_designer": {"max_steps": 99},
+            "untrusted_agent": {"max_steps": 2}},
         "name_suffix": "lm1117 vref!!",
         "rationale": "3 runs escalated on LM1117 divider findings"}})
     result = propose_candidate(incumbent, {"runs": 5}, llm)
@@ -153,6 +261,12 @@ def test_evolution_proposer_bounded_diff():
     assert "EVIL" not in bundle.solver_params["vref_table"]   # out of bounds
     assert bundle.scorecard_weights["warning"] == 5.0
     assert bundle.scorecard_weights["error"] == 30.0          # 9999 rejected
+    assert "circuit_architect" in bundle.prompts
+    assert "untrusted_agent" not in bundle.prompts
+    assert bundle.solver_params["tool_policies"]["schematic_designer"] == {
+        "max_steps": 6, "max_actions_per_step": 10}
+    assert "pcb_designer" not in bundle.solver_params["tool_policies"]
+    assert "untrusted_agent" not in bundle.solver_params["tool_policies"]
     assert name.startswith("candidate-llm-")
     assert bundle.version_id() != incumbent.version_id()
 
