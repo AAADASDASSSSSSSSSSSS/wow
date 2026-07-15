@@ -1,12 +1,22 @@
-"""Markdown design report: requirement -> generated design -> review -> repairs."""
+"""Markdown design report: requirement, production gates, and repair trace."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ratsnest.schemas import DesignSpec, EvaluationResult, RunRecord
 
-_SEV_ICON = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}
+_SEV_LABEL = {"error": "ERROR", "warning": "WARN", "info": "INFO"}
+
+
+def _family(project_dir: str) -> str:
+    path = Path(project_dir) / "boardplan.json"
+    try:
+        plan = json.loads(path.read_text(encoding="utf-8"))
+        return str(plan.get("topology") or "unknown")
+    except Exception:
+        return "unknown"
 
 
 def render_report(
@@ -19,88 +29,99 @@ def render_report(
 
     if spec is not None:
         lines += [
-            "## Requirement",
-            "",
-            f"> {spec.requirement_text or '(structured spec)'}",
-            "",
-            f"- board family: linear regulator ({spec.input_voltage:g}V -> "
-            f"{spec.output_voltage:g}V)",
-            f"- indicator LED: {spec.led or 'none'}",
-            "",
+            "## Requirement", "",
+            f"> {spec.requirement_text or '(structured spec)'}", "",
+            f"- board family: {_family(evaluation.project_dir)}",
+            f"- electrical target: {spec.input_voltage:g}V -> "
+            f"{spec.output_voltage:g}V at {spec.output_current_a:g}A",
+            f"- indicator LED: {spec.led or 'none'}", "",
         ]
 
     lines += [
-        "## Scorecard",
-        "",
-        f"| score | findings | suppressed | severity |",
-        f"|---|---|---|---|",
+        "## Scorecard", "",
+        "| score | findings | suppressed | severity |",
+        "|---|---|---|---|",
         f"| **{sc.score}/100** | {sc.findings_total} | {sc.suppressed_total} "
-        f"| {sc.severity_counts} |",
-        "",
-        f"strategy version: `{sc.strategy_version_id}`",
-        "",
+        f"| {sc.severity_counts} |", "",
+        f"strategy version: `{sc.strategy_version_id}`", "",
     ]
 
-    pcb_files = sorted(Path(evaluation.project_dir).glob("*.kicad_pcb")) \
-        if evaluation.project_dir else []
+    if sc.gate_results:
+        lines += [
+            "## Production Verification", "",
+            f"required gates passed: **{str(sc.required_gates_passed).lower()}**",
+            "", "| gate | status | tool | summary |",
+            "|---|---|---|---|",
+        ]
+        for name, gate in sc.gate_results.items():
+            summary = gate.summary.replace("|", "/")
+            lines.append(
+                f"| {name} | {gate.status.value} | {gate.tool or '-'} | {summary} |")
+        lines.append("")
+
+    pcb_files = (sorted(Path(evaluation.project_dir).glob("*.kicad_pcb"))
+                 if evaluation.project_dir else [])
     if pcb_files:
         board_text = pcb_files[0].read_text(encoding="utf-8", errors="replace")
         lines += [
-            "## Board",
-            "",
-            f"| footprints | routed segments | outline |",
-            f"|---|---|---|",
-            f"| {board_text.count('(footprint')} "
-            f"| {board_text.count('(segment')} "
-            f"| {'yes' if 'Edge.Cuts' in board_text else 'no'} |",
-            "",
+            "## Board", "",
+            "| footprints | routed segments | outline |",
+            "|---|---|---|",
+            f"| {board_text.count('(footprint')} | "
+            f"{board_text.count('(segment')} | "
+            f"{'yes' if 'Edge.Cuts' in board_text else 'no'} |", "",
         ]
 
-    actionable = [f for f in evaluation.findings if f.severity in ("error", "warning")]
+    actionable = [finding for finding in evaluation.findings
+                  if finding.severity in ("error", "warning")]
     lines += ["## Findings", ""]
     if actionable:
-        lines += ["| sev | rule | summary |", "|---|---|---|"]
-        for f in actionable:
-            summary = str((f.model_extra or {}).get("summary", ""))[:110]
-            lines.append(f"| {_SEV_ICON.get(f.severity, '')} {f.severity} "
-                         f"| {f.rule_id or f.detector} | {summary} |")
+        lines += ["| severity | rule | summary |", "|---|---|---|"]
+        for finding in actionable:
+            summary = str((finding.model_extra or {}).get("summary", ""))[:180]
+            lines.append(
+                f"| {_SEV_LABEL.get(finding.severity, finding.severity)} | "
+                f"{finding.rule_id or finding.detector} | {summary.replace('|', '/')} |")
     else:
-        lines.append("No error/warning findings — board is clean. ✅")
+        lines.append("No error or warning findings; all executed checks are clean.")
     lines.append("")
 
-    infos = [f for f in evaluation.findings if f.severity == "info"]
+    infos = [finding for finding in evaluation.findings
+             if finding.severity == "info"]
     if infos:
-        lines += ["<details><summary>Informational detections "
-                  f"({len(infos)})</summary>", ""]
-        for f in infos:
-            summary = str((f.model_extra or {}).get("summary", ""))[:110]
-            lines.append(f"- `{f.rule_id or f.detector}` {summary}")
+        lines += [f"<details><summary>Informational detections ({len(infos)})"
+                  "</summary>", ""]
+        for finding in infos:
+            summary = str((finding.model_extra or {}).get("summary", ""))[:180]
+            lines.append(f"- `{finding.rule_id or finding.detector}` {summary}")
         lines += ["", "</details>", ""]
 
     if record is not None and record.iterations:
-        lines += ["## Repair loop", "",
-                  f"run `{record.run_id}` — status **{record.status}**", "",
-                  "| iteration | score | delta | ops | resolved |",
-                  "|---|---|---|---|---|"]
-        for it in record.iterations:
-            ops = len(it.patch_plan.ops) if it.patch_plan else 0
-            lines.append(f"| {it.iteration} | {it.scorecard.score} "
-                         f"| {it.score_delta:+.1f} | {ops} "
-                         f"| {len(it.resolved_findings)} |")
+        lines += [
+            "## Repair Loop", "",
+            f"run `{record.run_id}` - status **{record.status}**", "",
+            "| iteration | score | delta | ops | resolved |",
+            "|---|---|---|---|---|",
+        ]
+        for iteration in record.iterations:
+            ops = len(iteration.patch_plan.ops) if iteration.patch_plan else 0
+            lines.append(
+                f"| {iteration.iteration} | {iteration.scorecard.score} | "
+                f"{iteration.score_delta:+.1f} | {ops} | "
+                f"{len(iteration.resolved_findings)} |")
         lines.append("")
-        for it in record.iterations:
-            if it.patch_plan and it.patch_plan.rationale:
-                lines.append(f"**Iteration {it.iteration} repairs:**")
-                for fid, why in it.patch_plan.rationale.items():
-                    lines.append(f"- `{fid}` — {why}")
+        for iteration in record.iterations:
+            if iteration.patch_plan and iteration.patch_plan.rationale:
+                lines.append(f"**Iteration {iteration.iteration} repairs:**")
+                for finding_id, reason in iteration.patch_plan.rationale.items():
+                    lines.append(f"- `{finding_id}` - {reason}")
                 lines.append("")
         if record.escalation:
-            lines += ["### Escalated to human review", "",
+            lines += ["### Escalated to Human Review", "",
                       f"```\n{record.escalation}\n```", ""]
 
-    lines += ["---",
-              "*generated by RatsNest — evaluation engine: kicad-happy "
-              f"(unforked, schema 1.3.x)*", ""]
+    lines += ["---", "*generated by RatsNest; evaluation engine: "
+              "kicad-happy (unforked, schema 1.3.x)*", ""]
     return "\n".join(lines)
 
 

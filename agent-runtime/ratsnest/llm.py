@@ -50,16 +50,19 @@ class BrainRequiredError(RuntimeError):
 class LlmClient:
     def __init__(self, config: Config | None = None,
                  recorder: Recorder | None = None,
-                 iteration: int = 0, timeout: float = 120.0):
+                 iteration: int = 0, timeout: float | None = None):
         self.config = config or Config.load()
         self.recorder = recorder
         self.iteration = iteration
-        self.timeout = timeout
+        self.timeout = (float(timeout) if timeout is not None
+                        else self.config.llm_timeout_seconds)
         preset = PROVIDERS.get(self.config.llm_provider,
                                PROVIDERS["anthropic"])
         self.protocol = preset[0]
         self.base_url = (self.config.llm_base_url or preset[1]).rstrip("/")
         self.model = self.config.llm_model or preset[2]
+        self.calls_used = 0
+        self.total_tokens_used = 0
 
     @property
     def available(self) -> bool:
@@ -77,41 +80,75 @@ class LlmClient:
                       max_tokens: int = 2000) -> dict[str, Any] | None:
         """One brain invocation -> parsed JSON dict, or None on failure
         (raises BrainRequiredError instead when RATSNEST_LLM=require)."""
-        if not self.available:
-            if self.required:
-                raise BrainRequiredError(
-                    f"RATSNEST_LLM=require but no usable brain "
-                    f"(provider={self.config.llm_provider}, key set: "
-                    f"{bool(self.config.llm_api_key)})")
-            return None
         started = time.monotonic()
         error: str | None = None
         usage: dict[str, Any] = {}
         parsed: dict[str, Any] | None = None
+        attempts = 0
+        model = self.config.llm_model_routes.get(agent, self.model)
+        requested_tokens = min(
+            max(1, int(max_tokens)), self.config.llm_max_tokens_per_call)
         try:
-            if self.protocol == "anthropic":
-                text, usage, error = self._call_anthropic(
-                    system, user, max_tokens)
+            if not self.available:
+                error = ("no usable brain "
+                         f"(provider={self.config.llm_provider}, key set: "
+                         f"{bool(self.config.llm_api_key)})")
+            elif self.calls_used >= self.config.llm_max_calls:
+                error = "LLM call budget exhausted"
+            elif self.total_tokens_used >= self.config.llm_max_total_tokens:
+                error = "LLM token budget exhausted"
             else:
-                text, usage, error = self._call_openai(
-                    system, user, max_tokens)
-            if error is None:
+                remaining = (self.config.llm_max_total_tokens
+                             - self.total_tokens_used)
+                requested_tokens = min(requested_tokens, max(1, remaining))
+                text = ""
+                for attempt in range(self.config.llm_retries + 1):
+                    if self.calls_used >= self.config.llm_max_calls:
+                        error = "LLM call budget exhausted during retry"
+                        break
+                    attempts += 1
+                    self.calls_used += 1
+                    try:
+                        if self.protocol == "anthropic":
+                            text, usage, error = self._call_anthropic(
+                                system, user, requested_tokens, model)
+                        else:
+                            text, usage, error = self._call_openai(
+                                system, user, requested_tokens, model)
+                    except Exception as exc:
+                        error = f"{type(exc).__name__}: {str(exc)[:200]}"
+                    if error is None or not _retryable(error):
+                        break
+                    if attempt < self.config.llm_retries:
+                        time.sleep(min(2.0, 0.25 * (2 ** attempt)))
+
+                used = _usage_tokens(usage)
+                self.total_tokens_used += used
+                if self.total_tokens_used > self.config.llm_max_total_tokens:
+                    error = "LLM response exceeded the total token budget"
+                if error is None:
+                    parsed = extract_json(text)
+                    if parsed is None:
+                        error = "no JSON object in completion"
+            if error is None and parsed is None:
                 parsed = extract_json(text)
                 if parsed is None:
                     error = "no JSON object in completion"
-        except Exception as exc:
-            error = f"{type(exc).__name__}: {str(exc)[:200]}"
         finally:
             if self.recorder is not None:
                 self.recorder.emit(
                     f"llm.{agent}", self.iteration,
                     agent_state={"brain": "llm"},
                     action={"provider": self.config.llm_provider,
-                            "model": self.model,
+                            "model": model,
                             "system_chars": len(system),
-                            "prompt_chars": len(user)},
+                            "prompt_chars": len(user),
+                            "requested_tokens": requested_tokens},
                     outcome={"ok": error is None, "error": error,
                              "usage": usage,
+                             "attempts": attempts,
+                             "calls_used": self.calls_used,
+                             "total_tokens_used": self.total_tokens_used,
                              "elapsed_s": round(time.monotonic() - started, 2)},
                     metadata={"agent": agent, "crew": "brain"},
                 )
@@ -122,14 +159,15 @@ class LlmClient:
 
     # -- protocol adapters -----------------------------------------------------
 
-    def _call_anthropic(self, system: str, user: str, max_tokens: int):
+    def _call_anthropic(self, system: str, user: str, max_tokens: int,
+                        model: str):
         response = httpx.post(
             f"{self.base_url}/v1/messages",
             headers={"x-api-key": self.config.llm_api_key or "",
                      "authorization": f"Bearer {self.config.llm_api_key}",
                      "anthropic-version": "2023-06-01",
                      "content-type": "application/json"},
-            json={"model": self.model, "max_tokens": max_tokens,
+            json={"model": model, "max_tokens": max_tokens,
                   "system": system,
                   "messages": [{"role": "user", "content": user}]},
             timeout=self.timeout)
@@ -140,14 +178,15 @@ class LlmClient:
                        if b.get("type") == "text")
         return text, data.get("usage", {}), None
 
-    def _call_openai(self, system: str, user: str, max_tokens: int):
+    def _call_openai(self, system: str, user: str, max_tokens: int,
+                     model: str):
         headers = {"content-type": "application/json"}
         if self.config.llm_api_key:
             headers["authorization"] = f"Bearer {self.config.llm_api_key}"
         response = httpx.post(
             f"{self.base_url}/v1/chat/completions",
             headers=headers,
-            json={"model": self.model, "max_tokens": max_tokens,
+            json={"model": model, "max_tokens": max_tokens,
                   "messages": [{"role": "system", "content": system},
                                {"role": "user", "content": user}]},
             timeout=self.timeout)
@@ -158,6 +197,25 @@ class LlmClient:
         text = (choices[0].get("message", {}).get("content", "")
                 if choices else "")
         return text, data.get("usage", {}), None
+
+
+def _retryable(error: str) -> bool:
+    match = re.match(r"http\s+(\d+)", error.lower())
+    if match:
+        status = int(match.group(1))
+        return status in {408, 425, 429} or status >= 500
+    return any(name in error for name in (
+        "Timeout", "ConnectError", "ReadError", "RemoteProtocolError"))
+
+
+def _usage_tokens(usage: dict[str, Any]) -> int:
+    if not isinstance(usage, dict):
+        return 0
+    if isinstance(usage.get("total_tokens"), (int, float)):
+        return max(0, int(usage["total_tokens"]))
+    fields = ("input_tokens", "output_tokens",
+              "prompt_tokens", "completion_tokens")
+    return sum(max(0, int(usage.get(field, 0) or 0)) for field in fields)
 
 
 def extract_json(text: str) -> dict[str, Any] | None:

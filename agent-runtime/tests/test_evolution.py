@@ -1,5 +1,7 @@
 """AHE v1 tests: registry lifecycle, gates reject bad candidates, promote good ones."""
 
+import json
+
 import pytest
 
 from ratsnest.config import Config
@@ -73,3 +75,30 @@ def test_trigger_stats_from_trajectories(exp_config):
     assert stats["runs"] >= 2
     proposal = propose_surface(stats)
     assert proposal  # always produces a concrete proposal string
+
+
+def test_agent_failures_select_bounded_policy_surface(exp_config):
+    from ratsnest.evolution.triggers import compute_stats, propose_surface
+
+    trajectory_dir = exp_config.runs_dir / "run_agent_failure"
+    trajectory_dir.mkdir(parents=True)
+    events = [
+        {"node": "design.pcb_designer.plan", "outcome": {"validated": True}},
+        {"node": "design.pcb_designer.tool", "outcome": {"ok": False}},
+        {"node": "blackboard.message", "action": {
+            "sender": "pcb_designer", "kind": "status",
+            "payload": {"status": "blocked"}}},
+        {"node": "finish", "outcome": {"status": "escalated"},
+         "reward": -3},
+    ]
+    (trajectory_dir / "trajectory.jsonl").write_text(
+        "\n".join(json.dumps(event) for event in events) + "\n",
+        encoding="utf-8")
+
+    stats = compute_stats(exp_config.runs_dir)
+
+    assert stats["agent_plan_calls"] == {"pcb_designer": 1}
+    assert stats["agent_tool_failures"] == {"pcb_designer": 1}
+    assert stats["blocked_agent_tasks"] == {"pcb_designer": 1}
+    proposal = propose_surface(stats)
+    assert proposal.startswith("agent-policy surface: pcb_designer")

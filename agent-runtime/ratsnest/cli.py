@@ -2,6 +2,8 @@
 
     python -m ratsnest evaluate <project_dir> [--json]
     python -m ratsnest fix <project_dir> [--max-iter N] [--suggest-only] [--json]
+    python -m ratsnest design-plan <requirement> --backend crew --json
+    python -m ratsnest design-execute --plan <file> --plan-sha256 <sha> --out <dir>
     python -m ratsnest evolve [--boards N] [--promote]
     python -m ratsnest stats
     python -m ratsnest seed-defects
@@ -14,11 +16,11 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 
 from ratsnest.config import REPO_ROOT, Config
 from ratsnest.evolution import StrategyRegistry
-from ratsnest.kh_adapter import KicadHappyAdapter
 from ratsnest.schemas import RunConfig
 
 
@@ -32,7 +34,6 @@ def _print_scorecard(sc, findings) -> None:
 
 
 def cmd_evaluate(args) -> int:
-    from ratsnest.agents import synthesize
     from ratsnest.crews import CheckerCrew
     config = Config.load()
     _, strategy = StrategyRegistry(config.strategies_dir).load_active()
@@ -71,54 +72,108 @@ def cmd_fix(args) -> int:
     return 0 if record.status in ("converged", "suggested") else 1
 
 
-def cmd_design(args) -> int:
-    """Full pipeline: requirement -> DesignSpec -> KiCad project (via the
-    chosen backend) -> review loop -> previews + report + release zip."""
-    from ratsnest.agents import synthesize
+def _create_design_plan(requirement: str, backend: str,
+                        run_id: str | None = None):
+    """Build one no-KiCad planning result and its trajectory recorder."""
     from ratsnest.data_proxy import Recorder
-    from ratsnest.design_gen import parse_requirement
-    from ratsnest.orchestrator import RunLoop, RunStore
-    from ratsnest.pipeline import finalize_outputs, generate_for_backend
+    from ratsnest.design_workflow import plan_design, serialize_plan
+    from ratsnest.orchestrator import RunStore
 
     config = Config.load()
-    _, strategy = StrategyRegistry(config.strategies_dir).load_active()
+    strategy_name, strategy = StrategyRegistry(
+        config.strategies_dir).load_active()
+    run_id = run_id or f"run_{uuid.uuid4().hex[:12]}"
+    recorder = Recorder(
+        RunStore(config.runs_dir).run_dir(run_id), run_id,
+        config.control_plane_url,
+        base_metadata={"strategy_version_id": strategy.version_id(),
+                       "backend": backend, "workflow_phase": "plan"})
+    plan = plan_design(requirement, backend, strategy_name, strategy, config,
+                       recorder=recorder, run_id=run_id)
+    return config, plan, serialize_plan(plan)
 
-    quiet = getattr(args, "json", False)
+
+def _emit_design_plan(plan, payload: str, json_output: bool,
+                      plan_out: str | None) -> int:
+    from ratsnest.design_workflow import plan_sha256
+
+    digest = plan_sha256(payload)
+    if json_output:
+        sys.stdout.write(payload)
+        return 0
+    destination = (Path(plan_out).resolve() if plan_out else
+                   REPO_ROOT / "generated" / "plans" /
+                   f"{plan.board_plan.plan_id}.json")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(payload, encoding="utf-8")
+    print(f"plan: {destination}")
+    print(f"plan sha256: {digest}")
+    print(f"topology: {plan.board_plan.topology}  "
+          f"components={len(plan.board_plan.components)}  "
+          f"backend={plan.backend}")
+    print("No KiCad project was created. Review the plan, then execute it with:")
+    print(f'  python -m ratsnest design-execute --plan "{destination}" '
+          f'--plan-sha256 {digest}')
+    return 0
+
+
+def cmd_design_plan(args) -> int:
+    _, plan, payload = _create_design_plan(
+        args.requirement, args.backend, args.run_id)
+    return _emit_design_plan(plan, payload, args.json, args.plan_out)
+
+
+def _execute_design_payload(plan_json: str, expected_sha256: str,
+                            out_arg: str | None, max_iter: int,
+                            no_fix: bool, no_erc: bool,
+                            json_output: bool, open_project: bool) -> int:
+    from ratsnest.agents import synthesize
+    from ratsnest.data_proxy import Recorder
+    from ratsnest.design_workflow import (
+        execute_approved_plan,
+        parse_approved_plan,
+    )
+    from ratsnest.orchestrator import RunLoop, RunStore
+    from ratsnest.pipeline import evaluate_for_release, finalize_outputs
+
+    config = Config.load()
+    approved = parse_approved_plan(plan_json, expected_sha256)
+    plan = approved.plan
+    strategy = StrategyRegistry(config.strategies_dir).load_exact(
+        plan.strategy_name, plan.strategy_version_id)
+    quiet = json_output
 
     def say(msg: str) -> None:
         if not quiet:
             print(msg)
 
-    preview_spec = parse_requirement(args.requirement)
-    out_dir = Path(args.out) if args.out else (
-        REPO_ROOT / "generated" / preview_spec.project_name)
-    say(f"spec: {preview_spec.input_voltage:g}V -> "
-        f"{preview_spec.output_voltage:g}V, LED={preview_spec.led or 'none'}  "
-        f"backend={args.backend}  project={preview_spec.project_name}")
-
+    out_dir = Path(out_arg) if out_arg else (
+        REPO_ROOT / "generated" / plan.design_spec.project_name)
     gen_recorder = Recorder(
-        RunStore(config.runs_dir).run_dir(f"gen_{preview_spec.project_name}"),
-        f"gen_{preview_spec.project_name}", config.control_plane_url)
-    spec = generate_for_backend(args.requirement, out_dir, args.backend,
-                                strategy, config, gen_recorder)
-    say(f"generated via {args.backend} backend: {out_dir}")
+        RunStore(config.runs_dir).run_dir(plan.run_id), plan.run_id,
+        config.control_plane_url,
+        base_metadata={"strategy_version_id": strategy.version_id(),
+                       "project": str(out_dir), "backend": plan.backend,
+                       "workflow_phase": "execute"},
+        initial_step=plan.trajectory_step)
+    spec = execute_approved_plan(
+        approved, out_dir, strategy, config, recorder=gen_recorder)
+    say(f"executed approved {plan.backend} plan: {out_dir}")
 
     record = None
-    adapter = KicadHappyAdapter(config)
-    if args.no_fix:
-        ev = synthesize(adapter.analyze_all(out_dir), strategy, out_dir)
+    if no_fix:
+        ev = evaluate_for_release(out_dir, strategy, config)
     else:
         record = RunLoop(config).execute(RunConfig(
-            project_dir=str(out_dir), max_iterations=args.max_iter,
-            run_erc=not args.no_erc))
-        ev = synthesize(adapter.analyze_all(out_dir), strategy, out_dir)
+            project_dir=str(out_dir), max_iterations=max_iter,
+            run_erc=True), recorder=gen_recorder, run_id=plan.run_id)
+        ev = evaluate_for_release(out_dir, strategy, config)
         say(f"loop: {record.status} in {len(record.iterations)} iteration(s)")
 
     outputs = finalize_outputs(out_dir, ev, record, spec, config)
 
     if quiet and record is not None:
-        # machine mode for control-plane dispatch: same RunRecord contract as `fix`
-        print(record.model_dump_json(indent=2))
+        sys.stdout.write(record.model_dump_json())
         return 0
     say(f"report: {outputs['report']}")
     say(f"kicad project: {out_dir}")
@@ -127,12 +182,31 @@ def cmd_design(args) -> int:
         if k in outputs:
             say(f"{k}: {outputs[k]}")
     _print_scorecard(ev.scorecard, ev.findings)
-    if getattr(args, "open", False):
+    if open_project:
         pros = sorted(Path(out_dir).glob("*.kicad_pro"))
         if pros and hasattr(os, "startfile"):
             say(f"opening in KiCad: {pros[0].name}")
             os.startfile(str(pros[0]))  # noqa: S606 - explicit user request
     return 0 if ev.scorecard.severity_counts.get("error", 0) == 0 else 1
+
+
+def cmd_design_execute(args) -> int:
+    plan_json = Path(args.plan).read_text(encoding="utf-8")
+    return _execute_design_payload(
+        plan_json, args.plan_sha256, args.out, args.max_iter,
+        args.no_fix, args.no_erc, args.json, args.open)
+
+
+def cmd_design(args) -> int:
+    """Human-facing plan command; execution requires explicit auto-approval."""
+    _, plan, payload = _create_design_plan(
+        args.requirement, args.backend, args.run_id)
+    if not args.auto_approve:
+        return _emit_design_plan(plan, payload, args.json, args.plan_out)
+    from ratsnest.design_workflow import plan_sha256
+    return _execute_design_payload(
+        payload, plan_sha256(payload), args.out, args.max_iter,
+        args.no_fix, args.no_erc, args.json, args.open)
 
 
 def cmd_evolve(args) -> int:
@@ -250,8 +324,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--backend", choices=["template", "crew", "mcp"],
                    default="template",
                    help="template: deterministic S-expression writer; "
-                        "crew: disassembled creator agents, KiCad skills "
-                        "hosted in-process (no Node); "
+                        "crew: autonomous LLM design agents with validated "
+                        "KiCad tool services hosted in-process (no Node); "
                         "mcp: same skills via the external MCP stdio server")
     p.add_argument("--out", default=None, help="output project directory")
     p.add_argument("--no-fix", action="store_true",
@@ -259,10 +333,38 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-iter", type=int, default=4)
     p.add_argument("--no-erc", action="store_true")
     p.add_argument("--json", action="store_true",
-                   help="print the RunRecord JSON (control-plane dispatch mode)")
+                   help="print PlannedDesign JSON, or RunRecord with --auto-approve")
     p.add_argument("--open", action="store_true",
                    help="open the finished project in KiCad (local use)")
+    p.add_argument("--plan-out", default=None,
+                   help="write the reviewable PlannedDesign to this file")
+    p.add_argument("--run-id", default=None,
+                   help="trajectory run id supplied by the control plane")
+    p.add_argument("--auto-approve", action="store_true",
+                   help="explicit local-only approval and immediate execution")
     p.set_defaults(func=cmd_design)
+
+    p = sub.add_parser(
+        "design-plan", help="produce a reviewable plan without touching KiCad")
+    p.add_argument("requirement")
+    p.add_argument("--backend", choices=["template", "crew", "mcp"],
+                   default="crew")
+    p.add_argument("--plan-out", default=None)
+    p.add_argument("--run-id", default=None)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_design_plan)
+
+    p = sub.add_parser(
+        "design-execute", help="execute an approved immutable design plan")
+    p.add_argument("--plan", required=True)
+    p.add_argument("--plan-sha256", required=True)
+    p.add_argument("--out", default=None)
+    p.add_argument("--no-fix", action="store_true")
+    p.add_argument("--max-iter", type=int, default=4)
+    p.add_argument("--no-erc", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--open", action="store_true")
+    p.set_defaults(func=cmd_design_execute)
 
     p = sub.add_parser("evolve", help="run an AHE experiment (offline)")
     p.add_argument("--promote", action="store_true",

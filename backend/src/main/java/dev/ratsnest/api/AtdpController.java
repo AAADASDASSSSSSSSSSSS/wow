@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.ratsnest.core.DesignRunRepository;
 import dev.ratsnest.trajectory.AtdpEvent;
 import dev.ratsnest.trajectory.AtdpEventRepository;
+import dev.ratsnest.security.RunAccessPolicy;
+import dev.ratsnest.security.ServiceAccessPolicy;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +28,8 @@ public class AtdpController {
 
     private final AtdpEventRepository events;
     private final DesignRunRepository runs;
+    private final RunAccessPolicy access;
+    private final ServiceAccessPolicy serviceAccess;
     private final org.springframework.beans.factory.ObjectProvider<
             org.springframework.kafka.core.KafkaTemplate<String, String>> kafka;
 
@@ -36,10 +40,14 @@ public class AtdpController {
     private String atdpTopic;
 
     public AtdpController(AtdpEventRepository events, DesignRunRepository runs,
+                          RunAccessPolicy access,
+                          ServiceAccessPolicy serviceAccess,
                           org.springframework.beans.factory.ObjectProvider<
                                   org.springframework.kafka.core.KafkaTemplate<String, String>> kafka) {
         this.events = events;
         this.runs = runs;
+        this.access = access;
+        this.serviceAccess = serviceAccess;
         this.kafka = kafka;
     }
 
@@ -47,6 +55,7 @@ public class AtdpController {
     @PostMapping("/atdp/events")
     public ResponseEntity<Map<String, String>> ingest(@RequestBody String body)
             throws Exception {
+        serviceAccess.requireServiceOrOpenMode();
         JsonNode json = MAPPER.readTree(body);
         AtdpEvent event = new AtdpEvent();
         event.setEventId(json.path("event_id").asText(null));
@@ -76,6 +85,7 @@ public class AtdpController {
     @GetMapping("/runs/{id}/events")
     public ResponseEntity<List<AtdpEvent>> eventsForRun(@PathVariable String id) {
         return runs.findById(id)
+                .filter(access::canAccess)
                 .map(run -> run.getPythonRunId() == null
                         ? ResponseEntity.ok(List.<AtdpEvent>of())
                         : ResponseEntity.ok(

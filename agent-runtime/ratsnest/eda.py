@@ -68,8 +68,8 @@ def apply_edits(project_dir: Path, ops: list[dict[str, Any]],
     def get_host():
         nonlocal host
         if host is None:
-            from ratsnest.crews.creator import _get_host
-            host = _get_host(config)
+            from ratsnest.kicad_host import get_host as _host_factory
+            host = _host_factory(config)
         return host
 
     for op in ops:

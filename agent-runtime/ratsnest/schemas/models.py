@@ -12,11 +12,11 @@ import json
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CONTRACT_VERSION = "0.1.0"
+CONTRACT_VERSION = "0.2.0"
 
 # kicad-happy v1.3 severity vocabulary (finding_schema.VALID_SEVERITIES)
 SEVERITIES = ("error", "warning", "info")
@@ -97,6 +97,29 @@ class AnalyzerOutput(BaseModel):
     trust_summary: Optional[dict[str, Any]] = None
 
 
+class GateStatus(str, Enum):
+    passed = "passed"
+    failed = "failed"
+    unavailable = "unavailable"
+    error = "error"
+
+
+class VerificationGate(BaseModel):
+    """One independently reproducible engineering release gate."""
+
+    name: str
+    status: GateStatus
+    required: bool = True
+    summary: str = ""
+    tool: str = ""
+    evidence: list[str] = Field(default_factory=list)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def passed(self) -> bool:
+        return self.status == GateStatus.passed
+
+
 class Scorecard(BaseModel):
     score: float
     max_score: float = 100.0
@@ -105,6 +128,8 @@ class Scorecard(BaseModel):
     erc_passed: Optional[bool] = None  # None = ERC not run (kicad-cli absent)
     findings_total: int = 0
     suppressed_total: int = 0
+    gate_results: dict[str, VerificationGate] = Field(default_factory=dict)
+    required_gates_passed: bool = False
     strategy_version_id: str = ""
     created_at: str = Field(default_factory=_now_iso)
 
@@ -188,13 +213,19 @@ class TrajectoryEvent(BaseModel):
 # ---------------------------------------------------------------------------
 
 class DesignSpec(BaseModel):
-    """Structured requirement for the linear-regulator board family (gen v1)."""
+    """Validated requirement for the explicitly supported power-board families."""
+
+    model_config = ConfigDict(extra="forbid")
 
     project_name: str = "generated_board"
-    input_voltage: float = 12.0
-    output_voltage: float = 5.0
-    output_current_a: float = 0.5
+    input_voltage: float = Field(default=12.0, gt=0, le=60)
+    output_voltage: float = Field(default=5.0, gt=0, le=60)
+    output_current_a: float = Field(default=0.5, gt=0, le=10)
     led: Optional[str] = "red"  # LED color, or None for no indicator
+    topology: Literal["auto", "ldo", "buck"] = "auto"
+    ambient_temperature_c: float = Field(default=25.0, ge=-40, le=85)
+    max_output_ripple_mv: float = Field(default=100.0, gt=0, le=1000)
+    unsupported_features: list[str] = Field(default_factory=list, max_length=20)
     requirement_text: str = ""
 
 

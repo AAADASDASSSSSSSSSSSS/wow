@@ -1,6 +1,6 @@
 # RatsNest agent runtime — all intelligence lives here.
 # Build context must be the directory that contains BOTH `RatsNest/` and the
-# vendored `kicad-happy-main/` checkout (i.e. E:\agent-service-toolkit-main\kicad-happy-main):
+# vendored `kicad-happy-main/` checkout:
 #
 #   docker build -f RatsNest/infra/docker/runtime.Dockerfile -t ratsnest-runtime .
 #

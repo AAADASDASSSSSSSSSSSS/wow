@@ -10,9 +10,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ratsnest.protocols import LlmBrain
 from ratsnest.schemas import RepairMapping, StrategyBundle, SuppressionRule
 
 ALLOWED_REPAIR_TYPES = ("feedback_divider", "led_resistor", "fill_mpn")
+ALLOWED_AGENT_POLICIES = (
+    "circuit_architect", "schematic_designer", "pcb_designer", "repair_agent")
 
 _PROPOSER_PROMPT = """You are the evolution agent of a self-evolving KiCad \
 design system. You receive trigger statistics and escalation evidence from \
@@ -27,6 +30,9 @@ You may ONLY emit a diff over these asset classes (all optional):
   repair_mappings_add  [{"match_rule_id": str, "repair_type": one of %s,
                          "params": {}}]
   weight_updates       {"error"|"warning": number in [1, 50]}
+  prompt_updates       {agent_name: full policy text, 20..2000 chars}
+  tool_policy_updates  {agent_name: {"max_steps": 1..12,
+                                     "max_actions_per_step": 1..20}}
   name_suffix          short slug describing the change
   rationale            one paragraph: which evidence motivates this diff
 
@@ -36,9 +42,9 @@ diffs fail review.""" % (ALLOWED_REPAIR_TYPES,)
 
 
 def propose_candidate(incumbent: StrategyBundle, stats: dict[str, Any],
-                      llm) -> tuple[str, StrategyBundle, str] | None:
+                      llm: LlmBrain | None) -> tuple[str, StrategyBundle, str] | None:
     """Returns (name, candidate_bundle, rationale) or None."""
-    if llm is None or not llm.available:
+    if llm is None:
         return None
     payload = {
         "trigger_statistics": stats,
@@ -49,6 +55,9 @@ def propose_candidate(incumbent: StrategyBundle, stats: dict[str, Any],
                                 for m in incumbent.repair_mappings],
             "suppression_rule_ids": [s.rule_id for s in incumbent.suppressions],
             "scorecard_weights": incumbent.scorecard_weights,
+            "agent_prompts": {name: incumbent.prompts.get(name, "")
+                              for name in ALLOWED_AGENT_POLICIES},
+            "tool_policies": incumbent.solver_params.get("tool_policies", {}),
         },
     }
     raw = llm.complete_json("evolution_agent", _PROPOSER_PROMPT,
@@ -103,6 +112,35 @@ def propose_candidate(incumbent: StrategyBundle, stats: dict[str, Any],
         if sev in ("error", "warning") and 1.0 <= w <= 50.0:
             candidate.scorecard_weights[sev] = w
             changed = True
+
+    for agent, prompt in (raw.get("prompt_updates") or {}).items():
+        if (agent in ALLOWED_AGENT_POLICIES and isinstance(prompt, str)
+                and 20 <= len(prompt.strip()) <= 2000):
+            candidate.prompts[agent] = prompt.strip()
+            changed = True
+
+    policy_updates = raw.get("tool_policy_updates") or {}
+    if isinstance(policy_updates, dict):
+        policies = dict(candidate.solver_params.get("tool_policies", {}))
+        for agent, update in policy_updates.items():
+            if agent not in ALLOWED_AGENT_POLICIES or not isinstance(update, dict):
+                continue
+            current = dict(policies.get(agent, {}))
+            accepted = False
+            for key, lower, upper in (
+                    ("max_steps", 1, 12),
+                    ("max_actions_per_step", 1, 20)):
+                try:
+                    value = int(update[key])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if lower <= value <= upper:
+                    current[key] = value
+                    accepted = True
+            if accepted:
+                policies[agent] = current
+                changed = True
+        candidate.solver_params["tool_policies"] = policies
 
     if not changed:
         return None

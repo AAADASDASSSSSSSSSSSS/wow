@@ -58,11 +58,24 @@ class RunLoop:
         crew = CheckerCrew(self.config, strategy, recorder=recorder,
                            iteration=iteration)
         outputs = crew.evaluate(project_dir)
-        erc = run_erc(project_dir, self.config) if run_erc_flag else None
-        return synthesize(outputs, strategy, project_dir, erc_passed=erc)
+        gates = {}
+        gate_findings = []
+        if run_erc_flag:
+            from ratsnest.verification import verify_production
+            gates, gate_findings = verify_production(project_dir, self.config)
+        if gates:
+            erc_gate = gates.get("erc")
+            erc = erc_gate.passed if erc_gate is not None else None
+        else:
+            erc = run_erc(project_dir, self.config) if run_erc_flag else None
+        return synthesize(
+            outputs, strategy, project_dir, erc_passed=erc,
+            gate_results=gates, additional_findings=gate_findings)
 
     def execute(self, run_config: RunConfig,
-                strategy_override: StrategyBundle | None = None) -> RunRecord:
+                strategy_override: StrategyBundle | None = None,
+                recorder: Recorder | None = None,
+                run_id: str | None = None) -> RunRecord:
         project_dir = Path(run_config.project_dir)
         if strategy_override is not None:
             strategy = strategy_override
@@ -71,13 +84,25 @@ class RunLoop:
         else:
             _, strategy = self.registry.load_active()
 
-        record = RunRecord(config=run_config,
-                           strategy_version_id=strategy.version_id(),
-                           status="running")
+        resolved_run_id = run_id or (recorder.run_id if recorder else None)
+        if recorder is not None and resolved_run_id != recorder.run_id:
+            raise ValueError("recorder run_id does not match the requested run_id")
+        record_kwargs = {
+            "config": run_config,
+            "strategy_version_id": strategy.version_id(),
+            "status": "running",
+        }
+        if resolved_run_id is not None:
+            record_kwargs["run_id"] = resolved_run_id
+        record = RunRecord(**record_kwargs)
         meta = {"strategy_version_id": strategy.version_id(),
                 "project": str(project_dir)}
-        rec = Recorder(self.store.run_dir(record.run_id), record.run_id,
-                       self.config.control_plane_url, base_metadata=meta)
+        if recorder is None:
+            rec = Recorder(self.store.run_dir(record.run_id), record.run_id,
+                           self.config.control_plane_url, base_metadata=meta)
+        else:
+            rec = recorder
+            rec.base_metadata = {**rec.base_metadata, **meta}
         from ratsnest.llm import LlmClient
         llm = LlmClient(self.config, rec)
         sch_path = find_root_schematic(project_dir)
@@ -88,7 +113,11 @@ class RunLoop:
         rec.emit("evaluate", 0,
                  observation={"project": str(project_dir)},
                  outcome={"score": ev.scorecard.score,
-                          "severity_counts": ev.scorecard.severity_counts},
+                          "severity_counts": ev.scorecard.severity_counts,
+                          "required_gates_passed":
+                              ev.scorecard.required_gates_passed,
+                          "gates": {name: gate.status.value for name, gate in
+                                    ev.scorecard.gate_results.items()}},
                  metadata=meta)
 
         for iteration in range(1, run_config.max_iterations + 1):
@@ -111,7 +140,12 @@ class RunLoop:
                 metadata=meta)
 
             if not plan.ops:
-                record.status = "converged" if not prev_errors else "escalated"
+                record.status = (
+                    "converged"
+                    if not prev_errors and (
+                        not ev.scorecard.gate_results
+                        or ev.scorecard.required_gates_passed)
+                    else "escalated")
                 if escalations:
                     record.escalation = {
                         "unresolved": [f.finding_id() for f in escalations],
@@ -182,11 +216,18 @@ class RunLoop:
                 score_delta=round(score_delta, 2)))
             ev = new_ev
 
-            if not any(f.severity in ("error", "warning") for f in ev.findings):
+            if (not any(f.severity in ("error", "warning") for f in ev.findings)
+                    and (not ev.scorecard.gate_results
+                         or ev.scorecard.required_gates_passed)):
                 record.status = "converged"
                 break
         else:
-            record.status = ("converged" if not _error_ids(ev) else "escalated")
+            record.status = (
+                "converged"
+                if not _error_ids(ev) and (
+                    not ev.scorecard.gate_results
+                    or ev.scorecard.required_gates_passed)
+                else "escalated")
             if record.status == "escalated":
                 record.escalation = {"reason": "iteration budget exhausted",
                                      "open_errors": sorted(_error_ids(ev))}

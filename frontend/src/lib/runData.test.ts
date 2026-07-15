@@ -75,4 +75,29 @@ describe("run data helpers", () => {
       })
     ).toContain("scored");
   });
+
+  it("summarizes autonomous Agent plans and tool calls", () => {
+    const plan = summarizeEvent({
+      iteration: 0,
+      step: 7,
+      node: "design.schematic_designer.plan",
+      payload: JSON.stringify({
+        action: {
+          goal: "materialize schematic",
+          actions: [{ tool: "place_component" }, { tool: "connect_pin" }]
+        }
+      })
+    });
+    const tool = summarizeEvent({
+      iteration: 0,
+      step: 8,
+      node: "design.schematic_designer.tool",
+      payload: JSON.stringify({
+        action: { tool: "place_component", arguments: { ref: "U1" } }
+      })
+    });
+
+    expect(plan).toContain("place_component -> connect_pin");
+    expect(tool).toContain("place_component");
+  });
 });

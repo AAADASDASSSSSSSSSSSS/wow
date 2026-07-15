@@ -52,6 +52,15 @@ class StrategyRegistry:
         name = self.active_name()
         return name, self.load(name)
 
+    def load_exact(self, name: str, version_id: str) -> StrategyBundle:
+        """Load a named strategy and prove its content identity."""
+        strategy = self.load(name)
+        actual = strategy.version_id()
+        if actual != version_id:
+            raise ValueError(
+                f"strategy {name!r} changed: expected {version_id}, got {actual}")
+        return strategy
+
     # -- write (control-plane actions; rollback is first-class) --------------
     def save_candidate(self, bundle: StrategyBundle, name: str) -> Path:
         vdir = self.dir / name

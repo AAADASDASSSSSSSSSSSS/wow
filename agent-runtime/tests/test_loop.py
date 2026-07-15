@@ -6,6 +6,7 @@ import shutil
 import pytest
 
 from ratsnest.config import REPO_ROOT, Config
+from ratsnest.data_proxy import Recorder
 from ratsnest.design_edit import Patcher
 from ratsnest.orchestrator import RunLoop, RunStore
 from ratsnest.schemas import PatchPlan, RepairOp, RepairOpType, RunConfig
@@ -80,3 +81,25 @@ def test_clean_board_converges_immediately(tmp_path):
     assert record.status == "converged"
     assert record.iterations[0].scorecard.score == 100.0
     assert not record.iterations[0].patch_plan.ops
+
+
+def test_generation_and_repair_share_one_trajectory(defective_project, tmp_path):
+    loop, config = _loop(tmp_path)
+    run_id = "run_shared_trajectory"
+    recorder = Recorder(config.runs_dir / run_id, run_id)
+    recorder.emit("requirement_agent", outcome={"ok": True})
+
+    record = loop.execute(
+        RunConfig(project_dir=str(defective_project), max_iterations=3,
+                  run_erc=False),
+        recorder=recorder, run_id=run_id)
+
+    events = [json.loads(line) for line in
+              (config.runs_dir / run_id / "trajectory.jsonl")
+              .read_text(encoding="utf-8").splitlines()]
+    assert record.run_id == run_id
+    assert [event["step"] for event in events] == list(
+        range(1, len(events) + 1))
+    assert events[0]["node"] == "requirement_agent"
+    assert events[-1]["node"] == "finish"
+    assert all(event["run_id"] == run_id for event in events)

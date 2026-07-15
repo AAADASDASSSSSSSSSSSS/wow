@@ -17,6 +17,7 @@ from ratsnest.schemas import (
     EvaluationResult,
     Finding,
     StrategyBundle,
+    VerificationGate,
 )
 
 _SEV_RANK = {"error": 0, "warning": 1, "info": 2}
@@ -58,7 +59,14 @@ def _augment_vout_mismatch(findings: list[Finding],
         vref = _match_vref(strategy, extra.get("value", ""))
         if not (target and vref and r_top.get("ohms") and r_bot.get("ohms")):
             continue
-        expected = vref * (1 + r_top["ohms"] / r_bot["ohms"])
+        regulator_value = str(extra.get("value", ""))
+        tlv1117 = "tlv1117" in regulator_value.lower()
+        if tlv1117:
+            # TLV1117: R1 is VOUT-to-ADJ, R2 is ADJ-to-ground.
+            expected = (vref * (1 + r_bot["ohms"] / r_top["ohms"])
+                        + 80e-6 * r_bot["ohms"])
+        else:
+            expected = vref * (1 + r_top["ohms"] / r_bot["ohms"])
         if abs(expected - target) <= tol * target:
             continue
         reg_ref = extra.get("ref", "")
@@ -78,6 +86,9 @@ def _augment_vout_mismatch(findings: list[Finding],
             "target_vout": target,
             "computed_vout": round(expected, 4),
             "rail": rail,
+            "divider_orientation": (
+                "output_adjust_adjust_ground" if tlv1117
+                else "output_feedback_feedback_ground"),
         }))
     return out
 
@@ -101,10 +112,13 @@ def synthesize(
     strategy: StrategyBundle,
     project_dir: Path | str = "",
     erc_passed: bool | None = None,
+    gate_results: dict[str, VerificationGate] | None = None,
+    additional_findings: list[Finding] | None = None,
 ) -> EvaluationResult:
     raw: list[Finding] = []
     for env in outputs.values():
         raw.extend(env.findings)
+    raw.extend(additional_findings or [])
 
     # augment BEFORE suppression so suppressions can also target synthesized rules
     raw.extend(_augment_vout_mismatch(raw, strategy))
@@ -127,6 +141,7 @@ def synthesize(
     scorecard = compute_scorecard(
         kept, weights=strategy.scorecard_weights, erc_passed=erc_passed,
         suppressed_total=suppressed, strategy_version_id=strategy.version_id(),
+        gate_results=gate_results,
     )
     return EvaluationResult(project_dir=str(project_dir), scorecard=scorecard,
                             findings=kept, analyzer_outputs=outputs)

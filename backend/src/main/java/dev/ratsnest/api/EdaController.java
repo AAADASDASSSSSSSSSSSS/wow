@@ -2,7 +2,8 @@ package dev.ratsnest.api;
 
 import dev.ratsnest.core.DesignRun;
 import dev.ratsnest.core.DesignRunRepository;
-import org.springframework.beans.factory.annotation.Value;
+import dev.ratsnest.core.PythonBridge;
+import dev.ratsnest.security.RunAccessPolicy;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -13,12 +14,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
 
 /**
  * Web-EDA bridge (Stage 3): the browser sends typed edit ops; the Python
@@ -31,21 +32,20 @@ import java.util.concurrent.TimeUnit;
 public class EdaController {
 
     private final DesignRunRepository runs;
+    private final RunAccessPolicy access;
+    private final PythonBridge bridge;
 
-    @Value("${ratsnest.python-exe:python}")
-    private String pythonExe;
-
-    @Value("${ratsnest.agent-runtime-dir:.}")
-    private String agentRuntimeDir;
-
-    public EdaController(DesignRunRepository runs) {
+    public EdaController(DesignRunRepository runs, RunAccessPolicy access,
+                         PythonBridge bridge) {
         this.runs = runs;
+        this.access = access;
+        this.bridge = bridge;
     }
 
     @GetMapping("/runs/{id}/eda")
     public ResponseEntity<String> state(@PathVariable String id)
             throws Exception {
-        return bridge(id, null);
+        return runEda(id, null);
     }
 
     @PostMapping("/runs/{id}/eda")
@@ -55,33 +55,20 @@ public class EdaController {
         if (opsJson == null || opsJson.length() > 100_000) {
             return ResponseEntity.badRequest().build();
         }
-        return bridge(id, opsJson);
+        return runEda(id, opsJson);
     }
 
-    private static boolean canTouch(DesignRun run) {
-        var auth = org.springframework.security.core.context
-                .SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
-            return false;
-        }
-        boolean admin = auth.getAuthorities().stream().anyMatch(
-                a -> a.getAuthority().contains("ADMIN")
-                        || a.getAuthority().contains("SERVICE"));
-        return admin || run.getOwner().equals(auth.getName());
-    }
-
-    private ResponseEntity<String> bridge(String id, String opsJson)
+    private ResponseEntity<String> runEda(String id, String opsJson)
             throws Exception {
         DesignRun run = runs.findById(id).orElse(null);
         if (run == null || run.getProjectDir() == null
                 || !Files.isDirectory(Path.of(run.getProjectDir()))) {
             return ResponseEntity.notFound().build();
         }
-        if (run.getOwner() != null && !canTouch(run)) {
+        if (!access.canAccess(run)) {
             return ResponseEntity.notFound().build();  // same policy as RunController
         }
-        List<String> cmd = new java.util.ArrayList<>(List.of(
-                pythonExe, "-m", "ratsnest", "eda", run.getProjectDir()));
+        List<String> cmd = new java.util.ArrayList<>(List.of("eda", run.getProjectDir()));
         Path opsFile = null;
         if (opsJson != null) {
             opsFile = Files.createTempFile("ratsnest-eda", ".json");
@@ -90,17 +77,15 @@ public class EdaController {
             cmd.add(opsFile.toString());
         }
         try {
-            Process proc = new ProcessBuilder(cmd)
-                    .directory(new File(agentRuntimeDir)).start();
-            String stdout = new String(proc.getInputStream().readAllBytes(),
-                    StandardCharsets.UTF_8);
-            proc.waitFor(3, TimeUnit.MINUTES);
-            if (stdout.isBlank()) {
+            PythonBridge.BridgeResult result = bridge.run(
+                    cmd, Duration.ofMinutes(3), Map.of());
+            if (result.stdout().isBlank()) {
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                         .body("{\"error\":\"eda bridge produced no output\"}");
             }
             return ResponseEntity.ok()
-                    .contentType(MediaType.APPLICATION_JSON).body(stdout);
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(result.stdout());
         } finally {
             if (opsFile != null) {
                 Files.deleteIfExists(opsFile);

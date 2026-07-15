@@ -6,7 +6,7 @@ Weights come from the active StrategyBundle — they are an evolvable asset.
 
 from __future__ import annotations
 
-from ratsnest.schemas import Finding, Scorecard
+from ratsnest.schemas import Finding, GateStatus, Scorecard, VerificationGate
 
 DEFAULT_WEIGHTS = {"error": 30.0, "warning": 3.0, "info": 0.0, "erc_fail": 15.0}
 
@@ -17,6 +17,7 @@ def compute_scorecard(
     erc_passed: bool | None = None,
     suppressed_total: int = 0,
     strategy_version_id: str = "",
+    gate_results: dict[str, VerificationGate] | None = None,
 ) -> Scorecard:
     w = dict(DEFAULT_WEIGHTS)
     if weights:
@@ -36,6 +37,8 @@ def compute_scorecard(
         deductions["erc_fail"] = w.get("erc_fail", 15.0)
 
     score = max(0.0, 100.0 - sum(deductions.values()))
+    gates = gate_results or {}
+    required = [gate for gate in gates.values() if gate.required]
     return Scorecard(
         score=round(score, 2),
         severity_counts=counts,
@@ -43,5 +46,9 @@ def compute_scorecard(
         erc_passed=erc_passed,
         findings_total=len(findings),
         suppressed_total=suppressed_total,
+        gate_results=gates,
+        required_gates_passed=(
+            bool(required)
+            and all(gate.status == GateStatus.passed for gate in required)),
         strategy_version_id=strategy_version_id,
     )

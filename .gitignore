@@ -19,3 +19,4 @@ benchmarks/seeded/*/
 schemas/*.json
 
 data/
+.env

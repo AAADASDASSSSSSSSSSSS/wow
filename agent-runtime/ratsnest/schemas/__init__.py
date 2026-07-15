@@ -6,6 +6,7 @@ from ratsnest.schemas.models import (  # noqa: F401
     EvaluationResult,
     ExperimentReport,
     Finding,
+    GateStatus,
     IterationRecord,
     PatchPlan,
     PatchResult,
@@ -19,4 +20,5 @@ from ratsnest.schemas.models import (  # noqa: F401
     StrategyBundle,
     SuppressionRule,
     TrajectoryEvent,
+    VerificationGate,
 )
