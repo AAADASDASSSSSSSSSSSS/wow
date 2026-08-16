@@ -1,0 +1,1 @@
+做一块 50×40 mm 的两层 PCB：STM32F103C8T6 做主控，USB-C 接口只用来取 5V 供电（不走数据），经 AMS1117-3.3 降到 3.3V。外挂 8MHz 晶振配两颗 20pF 负载电容，一个 10k 上拉的 NRST 复位按键，一个用户按键接 PA0，一颗状态 LED 接 PC13 并串 1k 限流电阻，留一个 4 pin SWD 调试排针 (SWDIO/SWCLK/GND/3V3)。MCU 每个 VDD 引脚都要 100nF 去耦，VDDA 额外加 1uF，BOOT0 用 10k 下拉。板子四角各一个 M2 安装孔。要求真的用 KiCad 出原理图和 PCB、真的布通线、真的生成 Gerber 和 BOM，不许纸上谈兵。

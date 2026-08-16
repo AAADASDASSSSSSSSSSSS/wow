@@ -1,0 +1,60 @@
+{
+  "schema_version": "1",
+  "id": "local-evidence-open-pcb",
+  "version": "1.0",
+  "title": "Local-evidence RatsNestPro PCB workflow",
+  "description": "Compatibility boundary for the legacy decisions/local-evidence Agent kernel. It exposes the professional product shell without claiming enforcement of the five production capability profiles.",
+  "scope": {
+    "supported": [
+      "evidence-grounded KiCad design requests",
+      "part and symbol validation",
+      "schematic, PCB, routing and review workflows"
+    ],
+    "excluded": [
+      "certified safety sign-off",
+      "guaranteed support for arbitrary board classes",
+      "automatic source-code evolution"
+    ]
+  },
+  "constraints": [
+    "Installed KiCad symbols and footprints are authoritative for library availability.",
+    "Model prose cannot override deterministic file, ERC, DRC or routing evidence.",
+    "This compatibility profile is transport metadata; the legacy Agent kernel retains its own evidence and capability gates."
+  ],
+  "evidence_requirements": [
+    "Official documentation for critical components and interfaces.",
+    "Installed KiCad library evidence for symbol and footprint bindings.",
+    "Actual filesystem and tool results for release claims."
+  ],
+  "toolchain": {
+    "required": [
+      "KiCad schematic and PCB tools",
+      "kicad-cli ERC and DRC",
+      "manufacturing export"
+    ],
+    "optional": [
+      "Freerouting",
+      "local semantic retrieval",
+      "official web and datasheet retrieval"
+    ]
+  },
+  "budget": {
+    "max_wall_clock_minutes": 60,
+    "max_llm_tokens": 120000,
+    "max_ahe_repairs": 3,
+    "max_same_failure_retries": 2
+  },
+  "acceptance": {
+    "required_artifacts": [
+      "editable KiCad project",
+      "verification report",
+      "manufacturing outputs when reached"
+    ],
+    "verification": [
+      "All reported artifacts must exist on disk.",
+      "Unresolved checks must remain visible in the final report.",
+      "Independent review is required before a release-ready claim."
+    ],
+    "delivery_policy": "Preserve valid editable outputs and disclose unresolved risks. This profile does not upgrade the legacy Agent kernel to the five-profile production capability model."
+  }
+}
