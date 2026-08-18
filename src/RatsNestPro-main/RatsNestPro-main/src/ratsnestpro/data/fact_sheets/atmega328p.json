@@ -1,0 +1,293 @@
+{
+  "device": "ATmega328P",
+  "device_class": "mcu",
+  "family": "AVR",
+  "aliases": [
+    "ATmega328",
+    "ATmega328P-AU",
+    "ATmega328P-AUR",
+    "ATmega328P-PU",
+    "ATmega328P-MU",
+    "ATmega328P-MUR",
+    "ATmega328P-AN",
+    "ATmega328P-MN",
+    "ATmega328P-A",
+    "MCU_Microchip_ATmega:ATmega328P-A"
+  ],
+  "excludes": [
+    "ATmega328PB"
+  ],
+  "source": {
+    "doc": "ATmega48A/PA/88A/PA/168A/PA/328/P Data Sheet Complete DS40002061B (Microchip, 2020)",
+    "ref": "Features, p.2",
+    "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SPDIP-28", "TQFP-32", "VQFN-28", "VQFN-32"],
+    "source": {
+      "doc": "ATmega DS40002061B",
+      "ref": "Features / I/O and Packages, p.2 (28-pin SPDIP, 32-lead TQFP, 28-pad VQFN, 32-pad VQFN); package codes confirmed in the ordering information, p.628: 32A = 32-lead TQFP, 28M1 = 28-pad VQFN 4x4x1.0 mm 0.45 mm pitch, 32M1-A = 32-pad VQFN 5x5x1.0 mm 0.50 mm pitch, 28P3 = 28-lead 0.300-inch wide Skinny Plastic Dual Inline Package (SPDIP)",
+      "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "package",
+      "combine": "first_match",
+      "on_unknown": "skip",
+      "unit": "pins",
+      "note": "Pin count follows the package; with the package unknown this slot deliberately fails open rather than guessing a variant.",
+      "branches": [
+        {"when": {"package": "SPDIP-28"}, "value": {"kind": "fixed", "value": 28, "unit": "pins",
+          "source": {"doc": "ATmega DS40002061B", "ref": "Features / I/O and Packages, p.2",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "TQFP-32"}, "value": {"kind": "fixed", "value": 32, "unit": "pins",
+          "source": {"doc": "ATmega DS40002061B", "ref": "Features / I/O and Packages, p.2; 32 TQFP pinout p.12",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "VQFN-28"}, "value": {"kind": "fixed", "value": 28, "unit": "pins",
+          "source": {"doc": "ATmega DS40002061B", "ref": "Features / I/O and Packages, p.2",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "VQFN-32"}, "value": {"kind": "fixed", "value": 32, "unit": "pins",
+          "source": {"doc": "ATmega DS40002061B", "ref": "Features / I/O and Packages, p.2; VQFN drawing S4B p.641",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+                     "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "ATmega DS40002061B",
+        "ref": "Features / I/O and Packages, p.2",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 1.8,
+      "max": 5.5,
+      "unit": "V",
+      "note": "Single operating-voltage range; unlike the STM32F103 there is no ADC-dependent narrowing.",
+      "source": {
+        "doc": "ATmega DS40002061B",
+        "ref": "Features / Operating Voltage, p.2",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_rails": {
+    "status": "asserted",
+    "value": [
+      {
+        "name": "VCC",
+        "min_v": 1.8,
+        "max_v": 5.5,
+        "origin": "external",
+        "note": "Digital supply voltage (DS §1.1.1, p.13)."
+      },
+      {
+        "name": "AVCC",
+        "min_v": 1.8,
+        "max_v": 5.5,
+        "origin": "external",
+        "note": "ADC / PC3:0 / ADC7:6 supply. Must be externally connected to VCC even when the ADC is unused; via a low-pass filter when the ADC is used (DS §1.1.7, p.14)."
+      }
+    ],
+    "source": {
+      "doc": "ATmega DS40002061B",
+      "ref": "§1.1 Pin Descriptions, p.13-14",
+      "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "freq_vs_supply": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "supply_v",
+      "combine": "max_of_matching",
+      "on_unknown": "strictest",
+      "unit": "MHz",
+      "note": "Voltage-derated speed grades. Overlapping arms are resolved by taking the highest matching limit, which is what the datasheet curve means and what the previous max_freq_at_voltage() implemented.",
+      "branches": [
+        {"when": {"supply_v": [1.8, 5.5]}, "value": {"kind": "fixed", "value": 4, "unit": "MHz",
+          "source": {"doc": "ATmega DS40002061B", "ref": "Features / Speed Grade p.2; §29.3 Speed Grades p.312",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"supply_v": [2.7, 5.5]}, "value": {"kind": "fixed", "value": 10, "unit": "MHz",
+          "source": {"doc": "ATmega DS40002061B", "ref": "Features / Speed Grade p.2; §29.3 Speed Grades p.312",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"supply_v": [4.5, 5.5]}, "value": {"kind": "fixed", "value": 20, "unit": "MHz",
+          "source": {"doc": "ATmega DS40002061B", "ref": "Features / Speed Grade p.2; §29.3 Speed Grades p.312",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+                     "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "ATmega DS40002061B",
+        "ref": "Features / Speed Grade, p.2 (0-4 MHz @ 1.8-5.5 V, 0-10 MHz @ 2.7-5.5 V, 0-20 MHz @ 4.5-5.5 V); §29.3 Speed Grades p.312 Figure 29-1",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clock_external": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 0.4,
+      "max": 20.0,
+      "unit": "MHz",
+      "note": "Full Swing Crystal Oscillator range. The Low Power oscillator mode covers 0.4-16.0 MHz (Table 9-3, p.39). Recommended C1/C2 is 12-22 pF in both tables; AVR042 §5.3 (p.15) widens that to 22-33 pF for standard high-frequency crystals. An external crystal is OPTIONAL — the calibrated internal RC oscillator is a valid clock source (Table 9-1, p.37) — so absence of a crystal is not a violation.",
+      "source": {
+        "doc": "ATmega DS40002061B",
+        "ref": "Table 9-5 Full Swing Crystal Oscillator operating modes, p.40",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clock_layout": {
+    "status": "asserted",
+    "value": {
+      "ground_guard": true,
+      "note": "Keep the distance between the crystal/capacitors and the MCU short, and surround the crystal with a ground plane whose vias sit close to the MCU pins (AVR042 §6 checklist items 4 and 5, p.17). No numeric distance and no explicit under-crystal keepout are stated, so neither is asserted here."
+    },
+    "source": {
+      "doc": "AVR042: AVR Hardware Design Considerations (Atmel-2521R, 09/2016)",
+      "ref": "§6 Layout checklist items 4-5, p.17",
+      "url": "https://ww1.microchip.com/downloads/en/AppNotes/Atmel-2521-AVR-Hardware-Design-Considerations_ApplicationNote_AVR042.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "decoupling": {
+    "status": "asserted",
+    "value": {
+      "per_pin": [
+        {
+          "pin_group": "AREF",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 0.1,
+            "unit": "uF",
+            "note": "AREF must also be decoupled; the typical value for the capacitor is 100 nF.",
+            "source": {
+              "doc": "AVR042: AVR Hardware Design Considerations (Atmel-2521R, 09/2016)",
+              "ref": "§2.2 Analog Supply, p.5",
+              "url": "https://ww1.microchip.com/downloads/en/AppNotes/Atmel-2521-AVR-Hardware-Design-Considerations_ApplicationNote_AVR042.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        }
+      ],
+      "per_supply_pair_required": true,
+      "per_supply_pair_note": "For devices with multiple pairs of power and ground pins it is essential that there is a decoupling capacitor for every pair of pins (AVR042 §2.1, p.5). AVR042 states the COUNT but no capacitance for the digital VCC/GND pairs, so the value stays unasserted here instead of being inferred as 100 nF — the 100 nF figure on p.5 belongs to AREF / the analog supply.",
+      "bulk": {
+        "kind": "qualitative",
+        "text": "The main power supply should also have a tantalum or ceramic capacitor to stabilize it. No capacitance is stated.",
+        "source": {
+          "doc": "AVR042: AVR Hardware Design Considerations (Atmel-2521R, 09/2016)",
+          "ref": "§2.1 Digital Supply, p.5",
+          "url": "https://ww1.microchip.com/downloads/en/AppNotes/Atmel-2521-AVR-Hardware-Design-Considerations_ApplicationNote_AVR042.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "max_distance_mm": null,
+      "placement_note": "Place decoupling capacitors very close to the die; a capacitor placed too far away creates a large high-current loop and spreads noise through the planes (AVR042 §2.1 and Figure 2-1, p.4-5). AVCC must be decoupled separately from VCC and isolated from it; with a separate AGND, analog and digital ground join at a single point at the supply GND (AVR042 §2.2 p.5, §6 item 3 p.17). No numeric distance is stated."
+    },
+    "source": {
+      "doc": "AVR042: AVR Hardware Design Considerations (Atmel-2521R, 09/2016)",
+      "ref": "§2 Power Supply, p.4-5; §6 checklist, p.17",
+      "url": "https://ww1.microchip.com/downloads/en/AppNotes/Atmel-2521-AVR-Hardware-Design-Considerations_ApplicationNote_AVR042.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "reset": {
+    "status": "asserted",
+    "value": {
+      "external_required": false,
+      "details": "Four reset sources: power-on, external RESET, watchdog and brown-out (DS §11.1, p.56). The RESET line has an internal pull-up, so no external reset circuit is required (AVR042 §3, p.6). AVR042 nevertheless recommends an external pull-up in noisy environments: >=4.7 kOhm when programming with STK600, and not less than 10 kOhm for DebugWIRE to work; the optional RESET-to-GND capacitor must NOT be fitted when DebugWIRE is used (AVR042 §3, p.6, Figure 3-1 shows 4.7 kOhm + 100 nF as a typical example). Minimum reset pulse width is 2.5 us and VRST is 0.2-0.9 VCC (DS Table 29-11, p.314). RESET has its own absolute maximum range of -0.5 V to +13.0 V, distinct from ordinary I/O (DS §29.1, p.308)."
+    },
+    "source": {
+      "doc": "ATmega DS40002061B",
+      "ref": "§11.1 Resetting the AVR p.56; §11.4 External Reset p.58; Table 29-11 p.314",
+      "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "boot_strapping": {
+    "status": "not_applicable",
+    "reason": "The AVR has no boot/strapping pins: the clock source is selected by the CKSEL fuses and reset behaviour by the RSTDISBL fuse, not by pin states sampled at power-up (DS Table 9-1 p.37; RSTDISBL p.95)."
+  },
+
+  "mandatory_peripherals": {
+    "status": "not_applicable",
+    "reason": "No external part is mandatory for the device to run: program memory is on-chip and the calibrated internal RC oscillator is a valid clock source (DS Table 9-1 Device Clocking Options, p.37)."
+  },
+
+  "pins": {
+    "status": "asserted",
+    "value": [
+      {"name": "VCC", "kind": "power", "float_allowed": false,
+       "note": "Digital supply voltage (DS §1.1.1, p.13)."},
+      {"name": "GND", "kind": "ground", "float_allowed": false,
+       "note": "Ground (DS §1.1.2, p.13)."},
+      {"name": "AVCC", "kind": "power", "float_allowed": false,
+       "note": "Must be externally connected to VCC even if the ADC is not used (DS §1.1.7, p.14)."},
+      {"name": "AREF", "kind": "adc",
+       "note": "Analog reference pin for the A/D converter (DS §1.1.8, p.14)."},
+      {"name": "XTAL1", "kind": "clock",
+       "note": "PB6/TOSC1; oscillator input (DS §1.1.3 p.13; §9.3 p.38)."},
+      {"name": "XTAL2", "kind": "clock",
+       "note": "PB7/TOSC2; oscillator output (DS §1.1.3 p.13; §9.3 p.38)."},
+      {"name": "PC6", "kind": "reset", "float_allowed": true,
+       "note": "RESET when RSTDISBL is unprogrammed; an internal pull-up means floating is tolerated, though AVR042 §3 recommends an external pull-up (DS §1.1.5, p.13)."},
+      {"name": "ADC6", "kind": "adc",
+       "note": "TQFP and VQFN packages only (DS §1.1.9, p.14)."},
+      {"name": "ADC7", "kind": "adc",
+       "note": "TQFP and VQFN packages only (DS §1.1.9, p.14)."}
+    ],
+    "source": {
+      "doc": "ATmega DS40002061B",
+      "ref": "§1.1 Pin Descriptions, p.13-14; pinouts p.12",
+      "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "thermal_pad": {
+    "status": "asserted",
+    "value": {
+      "required": true,
+      "min_vias": null,
+      "applies_to_packages": ["VQFN-28", "VQFN-32"],
+      "note": "The 32-lead VQFN (drawing S4B, 5x5 mm body) is punch-singulated with a 3.10 x 3.10 mm exposed pad (DS p.641-642). The datasheet states no thermal via count. SPDIP and TQFP have no exposed pad, so this rule does not apply to them."
+    },
+    "source": {
+      "doc": "ATmega DS40002061B",
+      "ref": "32-Lead VQFN package drawing (S4B), p.641-642",
+      "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
+      "accessed": "2026-07-30"
+    }
+  }
+}

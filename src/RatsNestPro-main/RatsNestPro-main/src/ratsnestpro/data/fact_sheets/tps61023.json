@@ -1,0 +1,212 @@
+{
+  "device": "TPS61023",
+  "device_class": "dcdc",
+  "family": "TPS6102x",
+  "aliases": ["TPS61023", "TPS61023DRLR"],
+  "source": {
+    "doc": "TPS61023 5.5V Boost Converter with 0.5V Ultra-Low Input Voltage, SLVSF14B (Texas Instruments, September 2019, revised August 2020)",
+    "ref": "Features and Description, p.1",
+    "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SOT563-DRL"],
+    "source": {
+      "doc": "TPS61023 SLVSF14B",
+      "ref": "Features p.1 ('1.2-mm x 1.6-mm SOT563 (DRL) 6-pin package'); Device Information table p.1",
+      "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 6,
+      "unit": "pins",
+      "note": "VIN, EN, SW, VOUT, FB, GND (functional block diagram, p.8). A 1.20 x 1.60 mm body — smaller than an 0603 pair, which is why layout discipline matters more than usual here.",
+      "source": {
+        "doc": "TPS61023 SLVSF14B",
+        "ref": "Features and Device Information p.1; Pin Functions, p.3",
+        "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vin_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 0.5,
+      "max": 5.5,
+      "unit": "V",
+      "note": "A BOOST converter — the input is below the output, the opposite of the TPS563201 buck and of every LDO here. The 0.5 V floor is the headline feature and is what allows a deeply discharged super-capacitor or a single depleted cell to keep the rail up. Note that VIN may legitimately EXCEED VOUT: the part then enters pass-through mode (Features, p.1), so a rail-feasibility check must not treat VIN > VOUT as an error on this device.",
+      "source": {
+        "doc": "TPS61023 SLVSF14B",
+        "ref": "§6.3 Recommended Operating Conditions, p.4 — VIN input voltage range 0.5 to 5.5 V",
+        "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "abs_max_vin": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 7.0,
+      "unit": "V",
+      "note": "The absolute maximum of 7 V applies to VIN, EN, FB, SW and VOUT alike — a single limit for all terminals. SW spikes are allowed slightly higher for very short durations: 8 V for 10 ns and 9 V for 1 ns. Output overvoltage protection trips at 5.7 V, i.e. below the absolute maximum, so the part defends its own output.",
+      "source": {
+        "doc": "TPS61023 SLVSF14B",
+        "ref": "§6.1 Absolute Maximum Ratings, p.4 — voltage range at terminals VIN, EN, FB, SW, VOUT -0.3 to 7 V; Description p.1 (5.7 V OVP)",
+        "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vout": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 2.2,
+      "max": 5.5,
+      "unit": "V",
+      "note": "Output voltage SETTING range — adjustable through an external FB divider (R1/R2 in the typical application circuit, p.1), not a fixed-option part. The 5.5 V ceiling means this device cannot make a 12 V rail, and the 2.2 V floor means it cannot make a 1.8 V rail either.",
+      "source": {
+        "doc": "TPS61023 SLVSF14B",
+        "ref": "§6.3 Recommended Operating Conditions, p.4 — VOUT output voltage setting range 2.2 to 5.5 V; Features p.1",
+        "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "current_rating_ma": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 3700.0,
+      "unit": "mA",
+      "note": "CAUTION — this is the 3.7 A VALLEY SWITCH CURRENT LIMIT, not an output current rating. On a boost converter the switch current is the INPUT-side inductor current, so the deliverable output current is substantially lower and depends on the conversion ratio: the datasheet defines the maximum continuous output current before current limit via Equation 1 (§7, p.9), and quotes 94% efficiency at VIN = 3.6 V, VOUT = 5 V, IOUT = 1.5 A as a representative operating point. KNOWN GATE LIMITATION: a regulator-adequacy check that compares this number directly against a load current would badly overstate the capability of this part. Use ~1.5 A as the demonstrated figure at 3.6 V to 5 V until an output-current slot exists.",
+      "source": {
+        "doc": "TPS61023 SLVSF14B",
+        "ref": "Features p.1 ('3.7-A Valley switching current limit'; '94% Efficiency at VIN = 3.6 V, VOUT = 5 V and IOUT = 1.5 A'); §7 current limit and Equation 1, p.9",
+        "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "switching_freq_khz": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "vin_v",
+      "combine": "max_of_matching",
+      "on_unknown": "strictest",
+      "unit": "kHz",
+      "note": "The switching frequency is input-voltage dependent: 1 MHz when VIN is above 1.5 V, falling gradually to 0.5 MHz as VIN drops from 1.5 V towards 1 V and below. The two arms below capture the endpoints the datasheet states as figures; the region between 1.0 and 1.5 V is a gradual transition rather than a step, which is why no arm claims a value there beyond the conservative 0.5 MHz. The part also enters auto-PFM power-save mode at light load, so the frequency falls again there.",
+      "branches": [
+        {"when": {"vin_v": [1.5, 5.5]}, "value": {"kind": "fixed", "value": 1000.0, "unit": "kHz",
+          "source": {"doc": "TPS61023 SLVSF14B", "ref": "Features p.1 — '1-MHz Switching frequency when VIN > 1.5 V'; Description p.1",
+                     "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"vin_v": [0.5, 1.5]}, "value": {"kind": "fixed", "value": 500.0, "unit": "kHz",
+          "source": {"doc": "TPS61023 SLVSF14B", "ref": "Features p.1 — '0.5-MHz switching frequency when VIN < 1 V'; Description p.1 ('decreases gradually to 0.5 MHz when the input voltage is below 1.5 V down to 1 V')",
+                     "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "TPS61023 SLVSF14B",
+        "ref": "Features and Description, p.1",
+        "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_inductor": {
+    "status": "asserted",
+    "value": {
+      "inductance": {
+        "kind": "range",
+        "min": 0.37,
+        "max": 2.9,
+        "unit": "uH",
+        "note": "EFFECTIVE inductance range, with 1.0 uH nominal — the value used in the datasheet's own typical application circuit. 'Effective' is the operative word: a nominal inductor must be chosen so that its value under actual DC bias and temperature still lands inside 0.37 to 2.9 uH, which for a small chip inductor with heavy saturation roll-off can mean picking a considerably larger nominal part. Both edges are hard, so an arbitrarily large inductor is out of specification too, not merely inefficient.",
+        "source": {
+          "doc": "TPS61023 SLVSF14B",
+          "ref": "§6.3 Recommended Operating Conditions, p.4 — L effective inductance range MIN 0.37 / NOM 1.0 / MAX 2.9 uH; Typical Application Circuit p.1 (1 uH)",
+          "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "isat": {
+        "kind": "qualitative",
+        "text": "No saturation current figure is stated in the Recommended Operating Conditions table. The relevant bound is the 3.7 A valley switch current limit: the inductor must not saturate below the peak current the converter can reach, which exceeds the valley limit by half the ripple current. Deliberately left qualitative rather than asserting 3.7 A as if it were the required saturation rating.",
+        "source": {
+          "doc": "TPS61023 SLVSF14B",
+          "ref": "Features p.1 (3.7-A valley switching current limit); §7 current limit description and Equation 1, p.9",
+          "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "note": "Inductance is a single hard range from the Recommended Operating Conditions table — contrast the TPS563201, where the minimum inductance depends on the output voltage."
+    },
+    "source": {
+      "doc": "TPS61023 SLVSF14B",
+      "ref": "§6.3 Recommended Operating Conditions, p.4",
+      "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "required_caps": {
+    "status": "asserted",
+    "value": [
+      {
+        "role": "input",
+        "dielectric": "ceramic",
+        "note": "EFFECTIVE input capacitance. The table lists two figures for CIN, 1.0 and 4.7 uF; read as minimum 1.0 uF with 4.7 uF nominal (the row has no third entry, unlike COUT which clearly shows MIN 4 / NOM 10 / MAX 1000). REVIEW NOTE: the MIN/NOM/MAX column assignment for this specific row was inferred from the row's arity, so 4.7 uF as 'nominal' rather than 'maximum' is the lower-confidence part of this entry. Because the specification is on EFFECTIVE capacitance, DC-bias derating must be applied when choosing the nominal part.",
+        "cap": {
+          "kind": "fixed",
+          "value": 1.0,
+          "unit": "uF",
+          "source": {
+            "doc": "TPS61023 SLVSF14B",
+            "ref": "§6.3 Recommended Operating Conditions, p.4 — CIN effective input capacitance range 1.0 / 4.7 uF",
+            "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+            "accessed": "2026-07-30"
+          }
+        }
+      },
+      {
+        "role": "output",
+        "dielectric": "ceramic",
+        "note": "EFFECTIVE output capacitance, minimum 4 uF with 10 uF nominal and a very permissive 1000 uF maximum — the wide ceiling is what lets this part sit in front of a bursty load such as a Wi-Fi radio. As with the input, the specification is on effective capacitance after DC-bias derating, so a 10 uF 0603 X5R at 5 V output may fall short of its nominal value.",
+        "cap": {
+          "kind": "range",
+          "min": 4.0,
+          "max": 1000.0,
+          "unit": "uF",
+          "source": {
+            "doc": "TPS61023 SLVSF14B",
+            "ref": "§6.3 Recommended Operating Conditions, p.4 — COUT effective output capacitance range MIN 4 / NOM 10 / MAX 1000 uF",
+            "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+            "accessed": "2026-07-30"
+          }
+        }
+      }
+    ],
+    "source": {
+      "doc": "TPS61023 SLVSF14B",
+      "ref": "§6.3 Recommended Operating Conditions, p.4; Typical Application Circuit, p.1",
+      "url": "https://www.ti.com/lit/ds/symlink/tps61023.pdf",
+      "accessed": "2026-07-30"
+    }
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "device": "AP2112K-3.3",
+  "device_class": "ldo",
+  "family": "AP2112",
+  "aliases": ["AP2112", "AP2112K", "AP2112K-3.3", "AP2112K-3.3TRG1"],
+  "source": {
+    "doc": "AP2112 600mA CMOS LDO Regulator with Enable, DS39724 Rev. 2-2 (Diodes Incorporated, June 2017)",
+    "ref": "Description and Features, p.1",
+    "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SOT25", "SOT89-5", "SO-8"],
+    "source": {
+      "doc": "AP2112 DS39724 Rev. 2-2",
+      "ref": "Pin Descriptions table, p.2 (columns SOT25 / SOT89-5 / SO-8); Absolute Maximum Ratings thermal resistance rows, p.3",
+      "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "package",
+      "combine": "first_match",
+      "on_unknown": "skip",
+      "unit": "pins",
+      "note": "SOT25 is the 5-pin SOT-23-5 outline that the common AP2112K-3.3TRG1 ships in. The SO-8 variant has 8 pins of which several are NC (pins 2, 3, 4 per the pin table).",
+      "branches": [
+        {"when": {"package": "SOT25"}, "value": {"kind": "fixed", "value": 5, "unit": "pins",
+          "source": {"doc": "AP2112 DS39724 Rev. 2-2", "ref": "Pin Descriptions, p.2 (SOT25 pins 1-5)",
+                     "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"package": "SOT89-5"}, "value": {"kind": "fixed", "value": 5, "unit": "pins",
+          "source": {"doc": "AP2112 DS39724 Rev. 2-2", "ref": "Pin Descriptions, p.2 (SOT89-5 pins 1-5)",
+                     "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"package": "SO-8"}, "value": {"kind": "fixed", "value": 8, "unit": "pins",
+          "source": {"doc": "AP2112 DS39724 Rev. 2-2", "ref": "Pin Descriptions, p.2 (SO-8 column, pins 1-8 with 2/3/4 NC)",
+                     "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Pin Descriptions, p.2",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vin_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 2.5,
+      "max": 6.0,
+      "unit": "V",
+      "note": "A real Recommended Operating Conditions table, unlike the AMS1117. Both edges are hard: below 2.5 V the part is out of its specified operating range, above 6.0 V it is beyond recommended conditions (absolute maximum is 6.5 V, see abs_max_vin). A 5 V USB input sits comfortably inside; a 12 V input does not.",
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Recommended Operating Conditions, p.3 — VIN Supply Voltage min 2.5, max 6.0 V",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "abs_max_vin": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 6.5,
+      "unit": "V",
+      "note": "Absolute maximum power supply voltage. Only 0.5 V above the recommended maximum of 6.0 V, so there is very little headroom — a nominal 5 V rail with significant overshoot is a real risk with this part.",
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Absolute Maximum Ratings, p.3 — VCC Power Supply Voltage 6.5 V",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vout": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 3.3,
+      "unit": "V",
+      "note": "IMPORTANT NEGATIVE FACT: the AP2112 family is available ONLY in fixed 1.2 V, 1.8 V, 2.5 V, 2.6 V and 3.3 V options — there is NO 5.0 V variant. 'AP2112K-5.0' does not exist. This is the exact part number a model previously invented, and asserting the real option list here makes that provably wrong instead of merely unlikely. Output accuracy is +/-1.5%.",
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Description, p.1 — 'available with a fixed output voltage of 1.2V, 1.8V, 2.5V, 2.6V, or 3.3V'; Electrical Characteristics AP2112-3.3, p.8",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "dropout_v": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 0.25,
+      "unit": "V",
+      "note": "250 mV typical at IOUT = 600 mA, for the 3.3 V variant specifically. Dropout is strongly variant-dependent on this part: the AP2112-1.2 table (p.4) lists VDROP typ 1000 mV / max 1300 mV, because a 1.2 V output cannot pass much current at low headroom. Do NOT carry the 250 mV figure across to other AP2112 output voltages. This low dropout is why the AP2112K-3.3 works from a 3.6 V Li-ion input where an AMS1117 (1.3 V max dropout) would not.",
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Features, p.1 — 'Low Dropout Voltage (3.3V): 250mV (Typ.) @IOUT = 600mA'; Electrical Characteristics AP2112-3.3, p.8",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "current_rating_ma": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 600.0,
+      "unit": "mA",
+      "note": "600 mA MINIMUM guaranteed continuous load current (the datasheet states it as a minimum, not a typical), measured for the 3.3 V variant at VIN = 4.3 V with VOUT between 3.251 and 3.350 V. Foldback short-circuit protection limits to 50 mA. NOTE for regulator-adequacy checks: an ESP32 needs a supply of at least 500 mA (ESP32 datasheet Table 5-2 IVDD), so this part clears that requirement but with only ~20% margin.",
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Features p.1 ('Output Current: 600mA (Min.)'); Electrical Characteristics AP2112-3.3 IOUT(MAX) row, p.8",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_cin": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 1.0,
+      "unit": "uF",
+      "note": "1.0 uF at the input, shown as CIN in the typical application circuit and used as the test condition for every electrical characteristics table. Dielectric guidance (Note 4, p.2): 'It is recommended to use X7R or X5R dielectric capacitor if 1.0 uF ceramic capacitor is selected as input/output capacitors' — so a 1 uF Y5V part is not equivalent. The part is stable with ceramic, tantalum or aluminium electrolytic.",
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Typical Application Circuit and Note 4, p.2; Electrical Characteristics test conditions, p.4-8",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_bypass_cap": {
+    "status": "not_applicable",
+    "reason": "The AP2112 has no reference-bypass or noise-reduction pin. Its five pins are VIN, GND, EN, NC and VOUT (Pin Descriptions, p.2), and its 50 uVRMS output-noise figure is achieved without an external bypass capacitor — unlike the MIC5219 (470 pF on BYP) and LP2985 (10 nF on BYPASS)."
+  },
+
+  "required_cout": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 1.0,
+      "unit": "uF",
+      "note": "1.0 uF at the output. The features list calls the part 'Stable with 1.0 uF Flexible Cap: Ceramic, Tantalum and Aluminum Electrolytic', and Note 4 recommends X7R or X5R if a ceramic is used. Contrast the AMS1117, which needs 22 uF solid tantalum for frequency compensation — a 20x difference driven by the compensation scheme, which is exactly why these values must never be shared between LDOs.",
+      "source": {
+        "doc": "AP2112 DS39724 Rev. 2-2",
+        "ref": "Features p.1 ('Stable with 1.0 uF Flexible Cap'); Typical Application Circuit and Note 4, p.2; Electrical Characteristics test conditions, p.4-8",
+        "url": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

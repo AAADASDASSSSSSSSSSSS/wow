@@ -1,0 +1,230 @@
+{
+  "device": "TPS563201",
+  "device_class": "dcdc",
+  "family": "TPS5632xx",
+  "aliases": ["TPS563201", "TPS563201DDCR"],
+  "source": {
+    "doc": "TPS563201/TPS563208 4.5V-17V Input, 3A Synchronous Step-Down Voltage Converter, SLVSD90B (Texas Instruments, December 2015, revised September 2024)",
+    "ref": "Features and Description, p.1",
+    "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SOT-23-6-DDC"],
+    "source": {
+      "doc": "TPS563201 SLVSD90B",
+      "ref": "Description p.1 — 'available in a 6-pin 1.6mm x 2.9mm SOT (DDC) package'; Device Information table p.1",
+      "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 6,
+      "unit": "pins",
+      "note": "Single package option. Pins per the simplified schematic on p.1: VIN, SW, GND, VBST, EN, VFB.",
+      "source": {
+        "doc": "TPS563201 SLVSD90B",
+        "ref": "Description and Device Information, p.1; Pin Configuration and Functions, p.3",
+        "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vin_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 4.5,
+      "max": 17.0,
+      "unit": "V",
+      "note": "A buck converter, so unlike every LDO in this batch the input must be comfortably ABOVE the output. Note the 4.5 V floor: this part cannot run from a 3.3 V rail, and a nominal 5 V USB input sits only 0.5 V above the minimum. UVLO wakes at 3.8-4.3 V and shuts down at 3.3-3.4 V (Electrical Characteristics, p.6).",
+      "source": {
+        "doc": "TPS563201 SLVSD90B",
+        "ref": "§5.3 Recommended Operating Conditions, p.4 — VIN supply input voltage range 4.5 to 17 V",
+        "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "abs_max_vin": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 19.0,
+      "unit": "V",
+      "note": "Absolute maximum for VIN and EN. Only 2 V above the 17 V recommended maximum, so a 12 V rail with inductive transients needs care. The SW node has its own limits (-2 to 19 V, and -3.5 to 21 V for 10 ns transients) and VBST goes to 25 V, but VIN is the rail a topology check compares against.",
+      "source": {
+        "doc": "TPS563201 SLVSD90B",
+        "ref": "§5.1 Absolute Maximum Ratings, p.4 — input voltage VIN, EN -0.3 to 19 V",
+        "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vout": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 0.76,
+      "max": 7.0,
+      "unit": "V",
+      "note": "Adjustable via an external feedback divider, not a fixed-option part. Table 7-2 (p.15) gives the exact divider for each common output: R2 is always 10.0 kOhm and R1 is 3.09 / 3.74 / 5.76 / 9.53 / 13.7 / 22.6 / 33.2 / 54.9 / 75 kOhm for 1 / 1.05 / 1.2 / 1.5 / 1.8 / 2.5 / 3.3 / 5 / 6.5 V respectively. Those divider values are design data with no slot in this questionnaire, so they are recorded here rather than dropped.",
+      "source": {
+        "doc": "TPS563201 SLVSD90B",
+        "ref": "Features p.1 ('Output voltage range: 0.76V to 7V'); Table 7-2 Recommended Component Values, p.15",
+        "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "current_rating_ma": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 3000.0,
+      "unit": "mA",
+      "note": "3 A synchronous step-down converter. The current limit is separately specified as 3.3 / 4.2 / 5.1 A (min/typ/max) measured at VOUT = 1.05 V with L1 = 1.5 uH, so the guaranteed limit sits just above the 3 A rating. On-resistances are 95 mOhm high-side and 57 mOhm low-side. This is an order of magnitude more current than any LDO in this batch and, being a switcher, without the dissipation penalty.",
+      "source": {
+        "doc": "TPS563201 SLVSD90B",
+        "ref": "Description p.1 ('3A synchronous step-down converters'); §5.5 Electrical Characteristics current limit and MOSFET rows, p.6",
+        "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "switching_freq_khz": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 580.0,
+      "unit": "kHz",
+      "note": "Nominal, measured at VIN = 12 V, VOUT = 3.3 V, IOUT = 1 A. The frequency is not truly constant: this is a D-CAP2 constant-on-time architecture, and the TPS563201 variant uses pulse-skip (Eco-mode) at light load, so the switching frequency drops proportionally to load current below the conduction-mode boundary (§6.3.2, p.11). The TPS563208 sibling runs forced continuous conduction instead and holds frequency. Figures 5-7 and 5-8 (p.8) plot the variation against input voltage and output current.",
+      "source": {
+        "doc": "TPS563201 SLVSD90B",
+        "ref": "Features p.1 ('580kHz switching frequency'); §5.5 Electrical Characteristics Fsw row, p.6; §6.3.2 Pulse Skip Control, p.11",
+        "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_inductor": {
+    "status": "asserted",
+    "value": {
+      "inductance": {
+        "kind": "conditional",
+        "selector": "vout_v",
+        "combine": "min_of_matching",
+        "on_unknown": "strictest",
+        "unit": "uH",
+        "note": "Table 7-2 gives a MIN / TYP / MAX inductance per output voltage, and the minimum rises with output voltage: 1.5 uH up to 1.8 V, 2.2 uH at 2.5-3.3 V, 3.3 uH at 5-6.5 V. The maximum is 4.7 uH throughout. The arms below carry the MINIMUM for each band, which is the value a design check must not go under; typicals are 2.2 / 2.2 / 3.3 uH respectively. TI is explicit about why these matter: the values place the loop's high-frequency zero so that phase margin stays adequate, so an arbitrary inductor is a stability problem and not merely a ripple trade-off.",
+        "branches": [
+          {"when": {"vout_v": [0.76, 1.8]}, "value": {"kind": "fixed", "value": 1.5, "unit": "uH",
+            "source": {"doc": "TPS563201 SLVSD90B", "ref": "Table 7-2 Recommended Component Values, p.15 — L1 MIN 1.5 uH for VOUT 1 to 1.8 V (TYP 2.2, MAX 4.7)",
+                       "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf", "accessed": "2026-07-30"}}},
+          {"when": {"vout_v": [1.8, 3.3]}, "value": {"kind": "fixed", "value": 2.2, "unit": "uH",
+            "source": {"doc": "TPS563201 SLVSD90B", "ref": "Table 7-2 Recommended Component Values, p.15 — L1 MIN 2.2 uH for VOUT 2.5 and 3.3 V (TYP 2.2, MAX 4.7)",
+                       "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf", "accessed": "2026-07-30"}}},
+          {"when": {"vout_v": [3.3, 7.0]}, "value": {"kind": "fixed", "value": 3.3, "unit": "uH",
+            "source": {"doc": "TPS563201 SLVSD90B", "ref": "Table 7-2 Recommended Component Values, p.15 — L1 MIN 3.3 uH for VOUT 5 and 6.5 V (TYP 3.3, MAX 4.7)",
+                       "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf", "accessed": "2026-07-30"}}}
+        ],
+        "source": {
+          "doc": "TPS563201 SLVSD90B",
+          "ref": "Table 7-2 Recommended Component Values, p.15",
+          "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "isat": {
+        "kind": "qualitative",
+        "text": "The inductor saturation current rating must be greater than the calculated peak current, and the RMS or heating current rating must be greater than the calculated RMS current (Equations 4-6). No fixed number can be asserted because both depend on VIN, VOUT, L and Fsw. For orientation, TI's own 3 A design example computes a 3.5 A peak and 3.01 A RMS and then selects a WE 74431122 rated 13 A peak / 9 A RMS — i.e. a large margin over the calculation.",
+        "source": {
+          "doc": "TPS563201 SLVSD90B",
+          "ref": "§7.2.2 design example, Equations 4-6 and inductor selection text, p.15",
+          "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "note": "Inductance is conditional on output voltage; saturation current is a derived requirement rather than a fixed figure."
+    },
+    "source": {
+      "doc": "TPS563201 SLVSD90B",
+      "ref": "Table 7-2 Recommended Component Values and §7.2.2 inductor selection, p.15",
+      "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "required_caps": {
+    "status": "asserted",
+    "value": [
+      {
+        "role": "input_decoupling",
+        "dielectric": "ceramic",
+        "note": "REQUIRED, not optional: 'The TPS563201 and TPS563208 require an input decoupling capacitor.' TI recommends a ceramic capacitor over 10 uF. A bulk capacitor may also be needed depending on the application. The capacitor voltage rating must exceed the maximum input voltage — with a 17 V input capability that means a 25 V part, and ceramic derating with DC bias must be accounted for on top.",
+        "cap": {
+          "kind": "fixed",
+          "value": 10.0,
+          "unit": "uF",
+          "source": {
+            "doc": "TPS563201 SLVSD90B",
+            "ref": "§7.2.2.4 Input Capacitor Selection, p.15",
+            "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+            "accessed": "2026-07-30"
+          }
+        }
+      },
+      {
+        "role": "input_hf_filter_optional",
+        "dielectric": "ceramic",
+        "note": "OPTIONAL. An additional 0.1 uF capacitor (C3) from pin 3 to ground provides extra high-frequency filtering.",
+        "cap": {
+          "kind": "fixed",
+          "value": 0.1,
+          "unit": "uF",
+          "source": {
+            "doc": "TPS563201 SLVSD90B",
+            "ref": "§7.2.2.4 Input Capacitor Selection, p.15",
+            "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+            "accessed": "2026-07-30"
+          }
+        }
+      },
+      {
+        "role": "output",
+        "dielectric": "ceramic or other low ESR",
+        "note": "Recommended range 20 uF to 68 uF, listed as C8 + C9 in Table 7-2 for every output voltage — i.e. the range does not change with VOUT even though the inductance does. The D-CAP2 scheme supports both specialty-polymer and ultra-low-ESR ceramic capacitors. TI's example uses two 22 uF TDK C3216X5R0J226M parts with about 2 mOhm ESR each, and Equation 7 gives the required RMS current rating (0.286 A calculated in that example).",
+        "cap": {
+          "kind": "range",
+          "min": 20.0,
+          "max": 68.0,
+          "unit": "uF",
+          "source": {
+            "doc": "TPS563201 SLVSD90B",
+            "ref": "§7.2.2 output capacitor text and Table 7-2 'C8 + C9 (uF) 20 to 68', p.15",
+            "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+            "accessed": "2026-07-30"
+          }
+        }
+      }
+    ],
+    "source": {
+      "doc": "TPS563201 SLVSD90B",
+      "ref": "§7.2.2 Detailed Design Procedure and Table 7-2, p.15",
+      "url": "https://www.ti.com/lit/ds/symlink/tps563201.pdf",
+      "accessed": "2026-07-30"
+    }
+  }
+}

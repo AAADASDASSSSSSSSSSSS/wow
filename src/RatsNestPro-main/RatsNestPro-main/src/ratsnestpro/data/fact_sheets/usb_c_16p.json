@@ -1,0 +1,87 @@
+{
+  "device": "USB-C 16P",
+  "device_class": "connector",
+  "family": "USB Type-C receptacle",
+  "aliases": ["USB-C 16P", "TYPE-C 16PIN 2MD(073)", "C2765186", "USB Type-C 16-pin",
+              "USB-C receptacle USB2.0"],
+  "source": {
+    "doc": "SHOU HAN TYPE-C 16PIN 2MD(073) drawing (LCSC C2765186) + USB Type-C Cable and Connector Specification Release 2.5 (USB-IF, March 2026)",
+    "ref": "Connector drawing RATING block p.2; spec §4.5.3.2.1 and Table 4-28 for Rd",
+    "url": "https://www.lcsc.com/product-detail/C2765186.html",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SMD-16P-RightAngle"],
+    "note": "Concrete part resolved from distributor stock rather than assumed: SHOU HAN TYPE-C 16PIN 2MD(073), LCSC C2765186, 946,047 in stock — over three times the next most stocked USB-C receptacle in the JLCPCB catalog.",
+    "source": {
+      "doc": "JLCPCB in-stock catalog record C2765186; SHOU HAN connector drawing",
+      "ref": "Catalog: package = SMD, joints = 16, Mounting Style = Surface Mount, Gender = Female, 'Right Angle Type-C SMD'; drawing p.1 outline",
+      "url": "https://www.lcsc.com/product-detail/C2765186.html",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 16,
+      "unit": "pins",
+      "note": "16 contacts, now asserted from the part rather than from the '16P' in a category name. Note what the reduced pin count costs: the 24-pin full-featured receptacle the USB Type-C specification defines carries the SuperSpeed pairs, and this variant drops them, so it is a USB 2.0-only connector. The specification does not define a 16-pin configuration — that is an industry reduction.",
+      "source": {
+        "doc": "JLCPCB in-stock catalog record C2765186 (SHOU HAN TYPE-C 16PIN 2MD(073))",
+        "ref": "Catalog: joints = 16, attribute 'Number of Contacts' = 16P; connector drawing p.1",
+        "url": "https://www.lcsc.com/product-detail/C2765186.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "cc_pulldown_ohm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 5100.0,
+      "unit": "ohm",
+      "tolerance_pct": 20.0,
+      "note": "Rd, the sink-side CC pulldown that tells a source a device is attached and wants power. Without it a USB-C port stays unpowered — the single most common reason a first USB-C board never turns on. The specification states 5.1 kOhm +/-20%, and that tolerance is carried here as tolerance_pct so a gate accepts the whole compliant band (about 4.08 to 6.12 kOhm) instead of demanding exactly 5100 ohm and rejecting a legitimate 4.7 kOhm or 5.6 kOhm part. A sink must fit ONE Rd per CC pin: CC1 and CC2 each need their own resistor, because which one is connected depends on cable orientation.",
+      "source": {
+        "doc": "USB Type-C Cable and Connector Specification Release 2.5 (USB-IF, March 2026)",
+        "ref": "Receptacle/plug pin tables notes, p.88 note 1 and p.89 note 1 — 'Pin A5 (CC) shall be connected to GND through a resistor Rd (5.1 kOhm +/-20%). See Section 4.5.3.2.1 and Table 4-28'; also §3.1.3 notes p.45",
+        "url": "https://www.usb.org/documents",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vbus_rating": {
+    "status": "asserted",
+    "value": {
+      "voltage_v": 5.0,
+      "current_a": 3.0,
+      "note": "From the manufacturer drawing's RATING block, which reads 'DC 5V 3A' with a practical temperature range of -25 to +85 degC. CATALOG DISCREPANCY RESOLVED: the LCSC/JLCPCB record for C2765186 states 3 A in its description but 5 A in its parsed attribute 'Current Rating - Power (Max)'. Those cannot both be right, and the two figures come from the same catalog record rather than two independent documents, so this is not a source conflict to encode — it is a parsing error in the distributor's attribute extraction, most likely from mangling 'DC 5V 3A'. The manufacturer drawing wins: 3 A. Consequences for design: a 3 A receptacle cannot carry USB PD's 5 A levels, and the 5 V figure means this part is not intended for the higher PD voltages either. Other drawing figures: 5,000 mating cycles, contact resistance 10 mOhm at 100 mA / 1 kHz, insulation resistance tested at 100 V DC for 1 minute, dielectric strength AC 100 V rms for 1 minute with a 0.5 mA trip."
+    },
+    "source": {
+      "doc": "SHOU HAN TYPE-C 16PIN 2MD(073) connector drawing (LCSC C2765186)",
+      "ref": "RATING block, p.2 ('DC 5V 3A', practical temperature range -25~85 degC); electrical performance §3.1-3.3 p.2-3; durability 5000 cycles §p.4",
+      "url": "https://www.lcsc.com/product-detail/C2765186.html",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "shield_grounding": {
+    "status": "asserted",
+    "value": {
+      "kind": "qualitative",
+      "text": "Shielding (braid) is required to enclose all the wires in the USB Type-C cable, and the shield SHALL be terminated to the plug metal shells; it should be connected as close to 360 degrees as possible to control EMC. On the plug side, side latches SHALL be connected to ground inside the plug, and EMC shielding springs are part of the mating interface. Deliberately stored as a qualitative fact: the specification states requirements about termination and 360-degree coverage without giving a number a gate could threshold, and the receptacle-side shell-to-board-ground treatment is a layout decision on the specific footprint.",
+      "source": {
+        "doc": "USB Type-C Cable and Connector Specification Release 2.5 (USB-IF, March 2026)",
+        "ref": "§3.4 Standard USB Type-C Cable Assemblies, p.82 (shield termination and 360-degree coverage); §3.2 mating interface notes, p.46 (side latches connected to ground, EMC shielding springs)",
+        "url": "https://www.usb.org/documents",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

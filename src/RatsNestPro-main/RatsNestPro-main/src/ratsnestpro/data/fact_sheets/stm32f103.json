@@ -1,0 +1,379 @@
+{
+  "device": "STM32F103",
+  "device_class": "mcu",
+  "family": "STM32F1",
+  "aliases": [
+    "STM32F103C8",
+    "STM32F103C8T6",
+    "STM32F103C8T7",
+    "STM32F103C8U6",
+    "STM32F103CB",
+    "STM32F103CBT6",
+    "STM32F103CBT7",
+    "STM32F103CBU6",
+    "STM32F103R8",
+    "STM32F103R8T6",
+    "STM32F103R8H6",
+    "STM32F103RB",
+    "STM32F103RBT6",
+    "STM32F103RBH6",
+    "STM32F103V8",
+    "STM32F103V8T6",
+    "STM32F103V8H6",
+    "STM32F103VB",
+    "STM32F103VBT6",
+    "STM32F103VBH6",
+    "STM32F103T8",
+    "STM32F103T8U6",
+    "STM32F103TB",
+    "STM32F103TBU6",
+    "MCU_ST_STM32F1:STM32F103C8Tx",
+    "STM32F103C8Tx",
+    "BluePill"
+  ],
+  "excludes": [
+    "STM32F103C4", "STM32F103C6", "STM32F103CC", "STM32F103CD", "STM32F103CE",
+    "STM32F103CF", "STM32F103CG",
+    "STM32F103R4", "STM32F103R6", "STM32F103RC", "STM32F103RD", "STM32F103RE",
+    "STM32F103RF", "STM32F103RG",
+    "STM32F103V4", "STM32F103V6", "STM32F103VC", "STM32F103VD", "STM32F103VE",
+    "STM32F103VF", "STM32F103VG",
+    "STM32F103Z4", "STM32F103Z6", "STM32F103ZC", "STM32F103ZD", "STM32F103ZE",
+    "STM32F103ZF", "STM32F103ZG",
+    "STM32F103T4", "STM32F103T6"
+  ],
+  "source": {
+    "doc": "STM32F103x8/STM32F103xB Datasheet DS5319 Rev 20 (STMicroelectronics)",
+    "ref": "Table 2 General features, p.10",
+    "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["VFQFPN36", "LQFP48", "UFQFPN48", "LQFP64", "TFBGA64", "LQFP100", "LFBGA100",
+              "UFBGA100"],
+    "source": {
+      "doc": "STM32F103x8/xB DS5319 Rev 20",
+      "ref": "Table 2 General features / Packages row, p.10 (medium-density performance line)",
+      "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "package",
+      "combine": "first_match",
+      "on_unknown": "skip",
+      "unit": "pins",
+      "note": "Family spans 36 to 100 pins; with the package unknown this fails open rather than assuming the popular LQFP48.",
+      "branches": [
+        {"when": {"package": "VFQFPN36"}, "value": {"kind": "fixed", "value": 36, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "Table 2 Packages, p.10",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "LQFP48"}, "value": {"kind": "fixed", "value": 48, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "LQFP48 pinout Figure, p.26",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "UFQFPN48"}, "value": {"kind": "fixed", "value": 48, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "§6.3 UFQFPN48 package information (A0B9), p.83",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "LQFP64"}, "value": {"kind": "fixed", "value": 64, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "Table 2 Packages, p.10; §6.7 LQFP64 (5W), p.94",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "TFBGA64"}, "value": {"kind": "fixed", "value": 64, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "§6.8 TFBGA64 package information (R8), p.97",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "LQFP100"}, "value": {"kind": "fixed", "value": 100, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "LQFP100 pinout Figure, p.22; §6.5 LQFP100 (1L)",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "LFBGA100"}, "value": {"kind": "fixed", "value": 100, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "§6.4 LFBGA100 package information (H0), p.85",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}},
+        {"when": {"package": "UFBGA100"}, "value": {"kind": "fixed", "value": 100, "unit": "pins",
+          "source": {"doc": "STM32F103x8/xB DS5319 Rev 20", "ref": "Table 2 Packages, p.10",
+                     "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                     "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "STM32F103x8/xB DS5319 Rev 20",
+        "ref": "Table 2 General features / Packages row, p.10",
+        "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 2.0,
+      "max": 3.6,
+      "unit": "V",
+      "note": "CORRECTED after checking Table 9. VDD's own range is UNCONDITIONAL: 'VDD Standard operating voltage, Conditions: -, Min 2, Max 3.6 V'. The widely repeated '2.4-3.6 V when the ADC is used' constrains VDDA, not VDD — Table 9 attaches footnote (1) to the VDDA row only, pointing at Table 47 Analog operating voltage for the ADC-used case. Since Table 9 note (2) requires VDD and VDDA to be at the same potential but explicitly tolerates up to 300 mV difference, they are not identical rails, so the ADC floor cannot be transplanted onto VDD. The VDDA condition is recorded on the VDDA entry in supply_rails. KNOWN LIMITATION: because supply_rails is not numerically compared, a 2.2 V board using the ADC is no longer caught by a gate; catching it would need a dedicated analog_supply_range slot plus an adc_used declaration in the requirement.",
+      "source": {
+        "doc": "STM32F103x8/xB DS5319 Rev 20 (July 2025)",
+        "ref": "§5.3.1 Table 9 General operating conditions, p.38 — VDD standard operating voltage 2 to 3.6 V, no conditions",
+        "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_rails": {
+    "status": "asserted",
+    "value": [
+      {"name": "VDD", "min_v": 2.0, "max_v": 3.6, "origin": "external",
+       "note": "Standard operating voltage, unconditional (DS Table 9, p.38). Five VDD pins on the 100-pin parts (Figure 14, p.36)."},
+      {"name": "VDDA", "min_v": 2.0, "max_v": 3.6, "origin": "external",
+       "note": "Analog supply for ADC, reset blocks, RCs and PLL. 2.0-3.6 V with the ADC UNUSED; the minimum rises to 2.4 V when the ADC is used (DS §5.1.2 p.15; Table 9 footnote 1 points to Table 47 Analog operating voltage). Table 9 footnote 2: VDDA must be at the same potential as VDD and it is recommended to power both from the same source, but a maximum difference of 300 mV between VDD and VDDA is tolerated during power-up and operation — so they are not the same rail. May be tied to VDD through a ferrite bead for noise filtering (AN2586 §2.1, p.8)."},
+      {"name": "VBAT", "min_v": 1.8, "max_v": 3.6, "origin": "external",
+       "note": "Supplies RTC, the 32 kHz oscillator and backup registers through a power switch when VDD is absent. With no battery fitted, connect to VDD with a 100 nF ceramic (DS §5.1.2 p.15; AN2586 §2.1 p.8)."},
+      {"name": "VCORE_1V8", "origin": "internal_ldo",
+       "note": "1.8 V digital domain produced by the embedded voltage regulator — must NOT be fed externally (AN2586 §2.1 Figure 4 power domains, p.7; DS Figure 14 p.36)."}
+    ],
+    "source": {
+      "doc": "STM32F103x8/xB DS5319 Rev 20",
+      "ref": "§5.1.2 pin/power descriptions p.15; §5.1.6 Figure 14 Power supply scheme p.36",
+      "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "freq_vs_supply": {
+    "status": "not_applicable",
+    "reason": "There is no voltage-versus-frequency derating for this family: the datasheet states a single 72 MHz maximum CPU frequency across the whole 2.0-3.6 V operating range (Table 2 General features, p.10; block diagram Fmax 72 MHz, p.11). Unlike the AVR speed grades there is no table to encode, so this slot is genuinely inapplicable rather than unextracted."
+  },
+
+  "clock_external": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 4.0,
+      "max": 16.0,
+      "unit": "MHz",
+      "note": "HSE crystal/ceramic-resonator range. An external crystal is OPTIONAL for the core (the internal 8 MHz HSI RC can drive SYSCLK, AN2586 §3 p.12), but USB and CAN require an external clock (AN2586 §4.2 p.17 notes the boot loader needs 8 / 14.7456 / 25 MHz HSE for USB/CAN).",
+      "source": {
+        "doc": "STM32F103x8/xB DS5319 Rev 20",
+        "ref": "Table 22 HSE 4-16 MHz oscillator characteristics, p.52; Features p.1 '4 to 16 MHz crystal oscillator'; block diagram XTAL OSC 4-16 MHz p.11",
+        "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clock_layout": {
+    "status": "asserted",
+    "value": {
+      "ground_guard": true,
+      "note": "Clocks are called out as noisy signals: a surrounding ground trace, shorter lengths and the absence of noisy or sensitive traces nearby improve EMC (AN2586 §6.5 Other signals, p.22). No numeric trace-length limit and no explicit under-crystal keepout are stated, so neither is asserted."
+    },
+    "source": {
+      "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+      "ref": "§6.5 Other signals, p.22",
+      "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "decoupling": {
+    "status": "asserted",
+    "value": {
+      "per_pin": [
+        {
+          "pin_group": "VDD",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 0.1,
+            "unit": "uF",
+            "note": "One 100 nF ceramic capacitor for each VDD pin. AN2586 §6.4 (p.21) adds that typical values span 10 nF to 100 nF and that the capacitor should sit as close as possible to — or directly under — the pin.",
+            "source": {
+              "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+              "ref": "§2.1 Power supply schemes, p.8",
+              "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        },
+        {
+          "pin_group": "VDDA",
+          "count_per_pin": 1,
+          "note": "Small analog decoupling capacitor — the two ST documents disagree by a decade.",
+          "cap": {
+            "kind": "conflicting_range",
+            "bound": "lower",
+            "unit": "uF",
+            "disputed_consequence": "margin",
+            "disputed_reason": "Both figures are ST's own for the same pin, and AN2586 §6.4 (p.21) explicitly blesses 10 nF to 100 nF as typical decoupling values — so a value inside that band is a headroom choice, not a functional break. A missing capacitor is still caught by the presence rule.",
+            "note": "AN2586 §2.1 p.8 requires 100 nF + 1 uF on VDDA; DS Figure 14 p.36 shows 10 nF + 1 uF.",
+            "observations": [
+              {"value": 0.01,
+               "source": {"doc": "STM32F103x8/xB DS5319 Rev 20",
+                          "ref": "§5.1.6 Figure 14 Power supply scheme, p.36 (VDDA: 10 nF + 1 uF)",
+                          "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+                          "accessed": "2026-07-30"}},
+              {"value": 0.1,
+               "source": {"doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+                          "ref": "§2.1 Power supply schemes, p.8 (VDDA: 100 nF ceramic + 1 uF)",
+                          "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+                          "accessed": "2026-07-30"}}
+            ]
+          }
+        },
+        {
+          "pin_group": "VDDA_bulk",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 1.0,
+            "unit": "uF",
+            "note": "Tantalum or ceramic; both ST documents agree on this one.",
+            "source": {
+              "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+              "ref": "§2.1 Power supply schemes, p.8; corroborated by DS Figure 14, p.36",
+              "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        },
+        {
+          "pin_group": "VBAT",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 0.1,
+            "unit": "uF",
+            "note": "Recommended when no external battery is fitted and VBAT is tied to VDD.",
+            "source": {
+              "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+              "ref": "§2.1 Power supply schemes, p.8",
+              "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        }
+      ],
+      "per_supply_pair_required": true,
+      "per_supply_pair_note": "Each power supply pair must be decoupled with a filtering ceramic capacitor plus a chemical capacitor of about 10 uF in parallel; the capacitors must be as close as possible to, or directly below, the pins (AN2586 §6.4, p.21).",
+      "bulk": {
+        "kind": "fixed",
+        "value": 4.7,
+        "unit": "uF",
+        "note": "Minimum 4.7 uF, typically 10 uF, tantalum or ceramic. The datasheet cautions that this capacitor must be connected to VDD3 (DS Figure 14 caution, p.36); AN2586 §6.4 p.21 describes it as 'about 10 uF'.",
+        "source": {
+          "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+          "ref": "§2.1 Power supply schemes, p.8",
+          "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "max_distance_mm": null,
+      "placement_note": "Capacitors as close as possible to, or directly below, the appropriate pins on the underside of the PCB; connections including pads, tracks and vias must be as low impedance as possible, preferably with dedicated supply planes (AN2586 §6.4 and Figure 13, p.21-22). No numeric distance is stated. VREF+ takes 100 nF + 1 uF when a separate reference is applied and must stay between 2.4 V and VDDA; it may join VDDA through a ~47 ohm resistor (AN2586 §2.1, p.8)."
+    },
+    "source": {
+      "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+      "ref": "§2.1 Power supply schemes p.8; §6.4 Decoupling p.21",
+      "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "reset": {
+    "status": "asserted",
+    "value": {
+      "external_required": false,
+      "details": "'The STM32F1xx does not require an external reset circuit to power-up correctly. Only a pull-down capacitor is recommended to improve EMS performance by protecting the device against parasitic resets.' NRST has an internal pull-up RPU. The recommended capacitor value is 100 nF, which may be reduced to 10 nF to limit the power consumption of charging/discharging it through the internal resistor (AN2586 §2.2 and Figure 5, p.11). External reset needs a minimum 20 us low pulse (AN2586 Figure 5, p.11). The datasheet gives a recommended NRST pin protection circuit in Figure 31 and NRST characteristics in Table 39 (p.66-67)."
+    },
+    "source": {
+      "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+      "ref": "§2.2 Reset, p.11 (Figure 5 simplified reset circuit)",
+      "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "boot_strapping": {
+    "status": "asserted",
+    "value": [
+      {"pin": "BOOT0", "required_state": "low",
+       "note": "BOOT1=x, BOOT0=0 selects the main flash memory as boot space — the normal application configuration. Latched on the fourth rising edge of SYSCLK after reset and resampled when leaving Standby, so the level must be held, not pulsed (AN2586 §4.1 Table 2, p.16)."},
+      {"pin": "BOOT1", "required_state": "low",
+       "note": "On the STM32F103 BOOT1 is PB2. BOOT1=0 with BOOT0=1 boots from system memory (the built-in bootloader); BOOT1=1 with BOOT0=1 boots from embedded SRAM (AN2586 §4.1 Table 2, p.16). The 10 kOhm resistors in AN2586 Figure 11 are labelled a typical example only."}
+    ],
+    "source": {
+      "doc": "AN2586: Getting started with STM32F10xxx hardware development (Rev 8)",
+      "ref": "§4.1 Boot mode selection, Table 2 Boot modes, p.16",
+      "url": "https://www.st.com/resource/en/application_note/an2586-getting-started-with-stm32f10xxx-hardware-development-stmicroelectronics.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "mandatory_peripherals": {
+    "status": "not_applicable",
+    "reason": "Nothing external is mandatory to run: program memory is on-chip flash and the internal 8 MHz HSI RC can drive SYSCLK without any crystal (AN2586 §3 Clocks, p.12). USB and CAN do require an external HSE clock, but that is a per-interface requirement rather than a device-level one and is recorded in clock_external."
+  },
+
+  "pins": {
+    "status": "asserted",
+    "value": [
+      {"name": "VDD", "kind": "power", "float_allowed": false,
+       "note": "Application supply, 2.0-3.6 V (DS §5.1.2, p.15)."},
+      {"name": "VSS", "kind": "ground", "float_allowed": false,
+       "note": "Ground (DS §5.1.2, p.15)."},
+      {"name": "VDDA", "kind": "power", "float_allowed": false,
+       "note": "Must be connected to VDD; minimum 2.4 V when the ADC is used (DS §5.1.2, p.15)."},
+      {"name": "VSSA", "kind": "ground", "float_allowed": false,
+       "note": "Must be connected to VSS (DS §5.1.2, p.15)."},
+      {"name": "VBAT", "kind": "power", "float_allowed": false,
+       "note": "Tie to VDD with a 100 nF ceramic when no backup battery is used (AN2586 §2.1, p.8)."},
+      {"name": "VREF+", "kind": "adc",
+       "note": "Must be kept between 2.4 V and VDDA; may connect to VDDA through a ~47 ohm resistor (AN2586 §2.1, p.8)."},
+      {"name": "VREF-", "kind": "ground",
+       "note": "Must be tied to VSSA where the package exposes it (AN2586 §2.1, p.7)."},
+      {"name": "NRST", "kind": "reset", "float_allowed": true,
+       "note": "Internal pull-up RPU; no external reset circuit required, a pull-down capacitor is recommended for EMS (AN2586 §2.2, p.11)."},
+      {"name": "OSC_IN", "kind": "clock",
+       "note": "HSE crystal input, 4-16 MHz (DS Table 22, p.52)."},
+      {"name": "OSC_OUT", "kind": "clock",
+       "note": "HSE crystal output (DS Table 22, p.52)."},
+      {"name": "BOOT0", "kind": "boot", "float_allowed": false,
+       "note": "Latched after reset to select the boot space; must be held at a defined level (AN2586 §4.1, p.16)."},
+      {"name": "TCK", "kind": "unspecified", "float_allowed": false,
+       "note": "SWCLK/TCK has an INTERNAL PULL-DOWN (the other JTAG inputs have pull-ups); JTAG inputs must not float because they drive debug flip-flops directly (AN2586 §5.3.3, p.20)."}
+    ],
+    "source": {
+      "doc": "STM32F103x8/xB DS5319 Rev 20",
+      "ref": "§5.1.2 pin/power descriptions p.15; pinouts p.22-26; AN2586 §5.3.3 p.20",
+      "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "thermal_pad": {
+    "status": "asserted",
+    "value": {
+      "required": true,
+      "min_vias": null,
+      "applies_to_packages": ["UFQFPN48"],
+      "note": "The UFQFPN48 has an exposed die pad on the underside: 'It is recommended to connect and solder this back-side pad to PCB ground' (DS §6.3, p.83). No via count is stated. The LQFP and BGA variants have no exposed pad, so the rule does not apply to them. VFQFPN36 was not checked in this round.",
+      "applies_note": "VFQFPN36 not verified — treat as unknown rather than assuming a pad."
+    },
+    "source": {
+      "doc": "STM32F103x8/xB DS5319 Rev 20",
+      "ref": "§6.3 UFQFPN48 package information (A0B9), p.83",
+      "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+      "accessed": "2026-07-30"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "fab_house": "JLCPCB",
+  "profile": "standard-2layer",
+  "units": "mm",
+  "min_track_width": 0.127,
+  "min_clearance": 0.2,
+  "min_via_diameter": 0.6,
+  "min_via_drill": 0.3,
+  "min_annular_ring": 0.15,
+  "min_hole_diameter": 0.3,
+  "min_board_edge_clearance": 0.3,
+  "min_silk_width": 0.15,
+  "layer_options": [2, 4, 6],
+  "notes": "Conservative JLCPCB standard 2-layer capabilities. Edit or point RATSNESTPRO_PROCESS_CAPABILITY at a custom JSON to match your fab house / advanced process."
+}

@@ -1,0 +1,313 @@
+{
+  "device": "RP2040",
+  "device_class": "mcu",
+  "family": "RP2040",
+  "aliases": ["RP2040", "Raspberry Pi Pico", "RP2-B2", "RP2040B2"],
+  "excludes": ["RP2350"],
+  "source": {
+    "doc": "RP2040 Datasheet (Raspberry Pi)",
+    "ref": "§1.4.2 Pin Descriptions Table 1, p.11-12",
+    "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["QFN-56-7x7"],
+    "source": {
+      "doc": "RP2040 Datasheet",
+      "ref": "Figure 3 'RP2040 Pinout for QFN-56 7x7mm (reduced ePad size)', p.12; §5.1 Package, p.608",
+      "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 56,
+      "unit": "pins",
+      "note": "Single package, so no package condition applies.",
+      "source": {
+        "doc": "RP2040 Datasheet",
+        "ref": "Figure 3 QFN-56 pinout, p.12; §5.1 Package, p.608",
+        "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 1.62,
+      "max": 3.63,
+      "unit": "V",
+      "note": "CORRECTED. An earlier reading took the pin-description phrase 'nominal voltage 1.8V to 3.3V' (Table 1, p.12) as the limits and concluded that a 3.6 V rail is out of specification — that was wrong. Table 634 Power Supply Specifications is the authoritative table: IOVDD min 1.62, typ 1.8 or 3.3, max 3.63 V, so 3.6 V is inside specification. The 1.8/3.3 V figures are the two nominal operating points. Footnote a: if IOVDD is below 2.5 V the GPIO VOLTAGE_SELECT registers must be adjusted (§2.9). The absolute maximum for IOVDD is also 3.63 V (Table 622, p.615), so there is almost no headroom above the recommended maximum.",
+      "source": {
+        "doc": "RP2040 Datasheet",
+        "ref": "§5.6 Table 634 Power Supply Specifications, p.623 (IOVDD 1.62 / 1.8 or 3.3 / 3.63 V)",
+        "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_rails": {
+    "status": "asserted",
+    "value": [
+      {"name": "IOVDD", "min_v": 1.62, "max_v": 3.63, "typ_v": 3.3, "origin": "external",
+       "note": "Digital IO supply. Two nominal operating points, 1.8 V and 3.3 V. Below 2.5 V the GPIO VOLTAGE_SELECT registers must be adjusted (Table 634 footnote a, p.623; §2.9). The crystal drive depends on this level: at IOVDD under 3.3 V the XIN/XOUT drive current falls and the crystal amplitude drops or may not oscillate, so the series resistor must be reduced (Hardware design §2.3, p.11)."},
+      {"name": "DVDD", "min_v": 1.05, "max_v": 1.16, "typ_v": 1.1, "origin": "internal_ldo",
+       "note": "Digital core supply. Produced by the on-chip LDO from IOVDD: VREG_OUT is wired to the DVDD pins, so it must NOT be fed from an external regulator (Hardware design §2.1 and §2.1.3, p.8-9). Short-term transients should stay within +/-100 mV (Table 634 footnote b, p.623)."},
+      {"name": "VREG_VIN", "min_v": 1.62, "max_v": 3.63, "typ_v": 3.3, "origin": "external",
+       "note": "Input to the internal core regulator. Regulator output current is 100 mA with a current limit of 150-450 mA (Table 192 Voltage Regulator Detailed Specifications, p.161)."},
+      {"name": "USB_VDD", "min_v": 3.135, "max_v": 3.63, "typ_v": 3.3, "origin": "external",
+       "note": "USB PHY supply — note the much tighter 3.135 V floor than the other rails (Table 634, p.623). A board running IOVDD at 1.8 V still needs 3.3 V here for USB."},
+      {"name": "ADC_AVDD", "min_v": 1.62, "max_v": 3.63, "typ_v": 3.3, "origin": "external",
+       "note": "ADC supply. Table 634 footnote c warns that 'ADC performance will be compromised at voltages below 2.97V' — so the 1.62 V floor keeps the ADC alive but not accurate; treat 2.97 V as the practical floor whenever ADC accuracy matters (Table 634, p.623)."}
+    ],
+    "source": {
+      "doc": "RP2040 Datasheet",
+      "ref": "§5.6 Table 634 Power Supply Specifications, p.623; §2.10.7 Table 192 Voltage Regulator Detailed Specifications, p.161",
+      "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "freq_vs_supply": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "core_supply_v",
+      "combine": "max_of_matching",
+      "on_unknown": "strictest",
+      "unit": "MHz",
+      "note": "FOUND ON A SECOND PASS — RP2040 does have a frequency-versus-voltage relationship, but it hangs off DVDD (the internal core rail) rather than the board rail, which is why a first search of the IOVDD specifications missed it. The datasheet is explicit: 'clk_sys (and clk_peri) have a maximum frequency of 133MHz across all process, voltage and temperature variations. You can achieve 200MHz by running at an elevated core supply (DVDD) and setting VREG VSEL to 1.15V.' The arms overlap deliberately and are combined with max_of_matching, exactly as the AVR speed grades are: at 1.15 V both arms match and 200 MHz wins. Note the direction is inverted relative to the AVR — here a higher clock DEMANDS a higher core voltage rather than a lower voltage capping the clock. on_unknown is 'strictest', so a design that does not declare an elevated core supply is held to 133 MHz. DVDD is produced by the on-chip regulator, so raising it is a firmware VREG VSEL setting, not a board change.",
+      "branches": [
+        {"when": {"core_supply_v": [1.05, 1.16]},
+         "value": {"kind": "fixed", "value": 133, "unit": "MHz",
+           "source": {"doc": "RP2040 Datasheet",
+                      "ref": "§2.15.3 Clock Generators note, p.184 — 'maximum frequency of 133MHz across all process, voltage and temperature variations'; Features p.10",
+                      "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+                      "accessed": "2026-07-30"}}},
+        {"when": {"core_supply_v": [1.15, 1.16]},
+         "value": {"kind": "fixed", "value": 200, "unit": "MHz",
+           "source": {"doc": "RP2040 Datasheet",
+                      "ref": "§5.6 Table 634 footnote b, p.623 — 'If using 200MHz for clk_sys as described in Section 2.15.3, set DVDD to 1.15V'; §2.15.3 note p.184; Features p.10 'up to 133MHz (or 200MHz at 1.15V)'",
+                      "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+                      "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "RP2040 Datasheet",
+        "ref": "§2.15.3 Clock Generators note, p.184; §5.6 Table 634 footnote b, p.623",
+        "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clock_external": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 12.0,
+      "unit": "MHz",
+      "note": "A 12 MHz crystal between XIN and XOUT is the preferred external frequency source; the alternative is a CMOS clock source (square wave at IOVDD level) into XIN. The reference design uses an ABM8-272-T3, the same 12 MHz crystal as the Raspberry Pi Pico. A 1 kOhm series resistor prevents over-driving and damaging the crystal at IOVDD = 3.3 V; at lower IOVDD the resistor must be reduced or the crystal may fail to oscillate.",
+      "source": {
+        "doc": "Hardware design with RP2040 (Raspberry Pi)",
+        "ref": "§2.3 Crystal oscillator / §2.3.1 Recommended crystal, p.10-11",
+        "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clock_layout": {
+    "status": "asserted",
+    "value": {
+      "max_trace_mm": null,
+      "max_crystal_esr_ohm": 50.0,
+      "series_resistor_ohm": 1000.0,
+      "note": "Trace length is qualitative and deliberately left without a number: 'PCB traces are a factor, and we therefore need to keep them small so we don't upset the crystal and stop it oscillating as intended. Try and keep the layout as short as possible.' The two NUMERIC constraints from the same section are recorded as fields rather than left in this note, because a candidate crystal can only be checked against a number something can read: (a) the crystal must have a maximum ESR of 50 ohm — the most-stocked 12 MHz part on the market, X322512MSB4SI, is 80 ohm and therefore does NOT meet this; (b) a 1 kOhm series resistor (R5) prevents the crystal being over-driven and damaged at IOVDD = 3.3 V — at lower IOVDD the XIN/XOUT drive current falls, so that resistor must be reduced or the crystal may not oscillate. Espressif's numeric 2.0 / 2.7 mm crystal-to-pin gaps are ESP32-family specific and must NOT be borrowed here."
+    },
+    "source": {
+      "doc": "Hardware design with RP2040 (Raspberry Pi)",
+      "ref": "§2.3 Crystal oscillator / §2.3.1 Recommended crystal, p.10-11 (PDF p.11)",
+      "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "decoupling": {
+    "status": "asserted",
+    "value": {
+      "per_pin": [
+        {
+          "pin_group": "power pins (IOVDD / DVDD / ADC_AVDD / USB_VDD)",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 0.1,
+            "unit": "uF",
+            "note": "'Ordinarily, we recommend the use of a 100nF capacitor per power pin.' The reference design itself deviates where routing space forces it (pins 48 and 49 share one), so treat this as the recommendation rather than an absolute count.",
+            "source": {
+              "doc": "Hardware design with RP2040 (Raspberry Pi)",
+              "ref": "§2.1 Power, p.8-9 (PDF p.9)",
+              "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        },
+        {
+          "pin_group": "VREG_IN",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 1.0,
+            "unit": "uF",
+            "note": "Ceramic, placed close to the pin. The regulator also restricts the ESR of these capacitors; physically small ceramic chip capacitors satisfy that in practice (the reference design uses 0402).",
+            "source": {
+              "doc": "Hardware design with RP2040 (Raspberry Pi)",
+              "ref": "§2.1.3 Internal voltage regulator, p.9 (PDF p.10)",
+              "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        },
+        {
+          "pin_group": "VREG_OUT",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 1.0,
+            "unit": "uF",
+            "note": "Ceramic, placed close to the pin, to provide a stable 1.1 V supply. Same ESR restriction as VREG_IN.",
+            "source": {
+              "doc": "Hardware design with RP2040 (Raspberry Pi)",
+              "ref": "§2.1.3 Internal voltage regulator, p.9 (PDF p.10)",
+              "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        }
+      ],
+      "per_supply_pair_required": true,
+      "per_supply_pair_note": "'Ordinarily, we recommend the use of a 100nF capacitor per power pin' — and the source is candid that its own reference design deviates: to leave room to route every pin out, RP2040 pins 48 and 49 share a single capacitor. So the rule is a recommendation with documented exceptions, not an invariant. It is important to place the decoupling close to the power pins so the local supply does not droop when current demand rises suddenly (Hardware design §2.1, p.8-9, PDF p.9).",
+      "bulk": {
+        "kind": "qualitative",
+        "text": "The voltage regulator has restrictions on the ESR of its input and output capacitors; in practice physically small ceramic chip capacitors meet them. No bulk capacitance value is given.",
+        "source": {
+          "doc": "Hardware design with RP2040 (Raspberry Pi)",
+          "ref": "§2.1.3 Internal voltage regulator, p.9 (PDF p.10)",
+          "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "max_distance_mm": null,
+      "placement_note": "'Place 1 uF capacitors close to both the input (VREG_IN) and the output (VREG_OUT)'. No numeric distance is stated."
+    },
+    "source": {
+      "doc": "Hardware design with RP2040 (Raspberry Pi)",
+      "ref": "§2.1.3 Internal voltage regulator, p.9 (PDF p.10)",
+      "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "reset": {
+    "status": "asserted",
+    "value": {
+      "external_required": false,
+      "details": "RUN is the global asynchronous reset pin: reset when driven low, run when driven high. 'If no external reset is required, this pin can be tied directly to IOVDD' (DS Table 1, p.12). A chip-level reset also occurs at power-on, on a brown-out event, or when RUN is taken low (DS §2.12 Chip-Level Reset, p.163). Separately, TESTEN is a factory test pin that must be tied to GND (DS Table 1, p.12)."
+    },
+    "source": {
+      "doc": "RP2040 Datasheet",
+      "ref": "§1.4.2 Pin Descriptions Table 1 (RUN, TESTEN), p.12; §2.12 Chip-Level Reset, p.163",
+      "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "boot_strapping": {
+    "status": "asserted",
+    "value": [
+      {"pin": "QSPI_SS", "required_state": "high at boot for normal flash boot; low at boot enters BOOTSEL",
+       "note": "'The QSPI_SS pin is used as a boot strap; RP2040 checks the value of this I/O during the boot sequence, and if it is found to be a logic 0, then RP2040 reverts to the BOOTSEL mode, where RP2040 presents itself as a USB mass storage device.' RP2040's QSPI_SS defaults to an internal pull-up at power-up, but there is a short window during switch-on where its state cannot be guaranteed; an external 10 kOhm pull-up to the 3.3 V supply guarantees it. The reference design marks that pull-up DNF because the chosen W25Q128JVS does not need it, but a different flash may. A 1 kOhm resistor to a USB_BOOT header pulls the pin low to force BOOTSEL. Both resistors should be placed close to the flash chip (Hardware design §2.2 Flash storage, p.9, PDF p.10)."},
+      {"pin": "TESTEN", "required_state": "tied to GND",
+       "note": "Factory test mode pin — must be tied to GND (DS Table 1, p.12). Not a boot selector, but a pin whose level is not optional."}
+    ],
+    "source": {
+      "doc": "Hardware design with RP2040 (Raspberry Pi)",
+      "ref": "§2.2 Flash storage, p.9 (PDF p.10); RP2040 Datasheet §2.8 Bootrom p.136-147 for BOOTSEL/PICOBOOT behaviour",
+      "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "mandatory_peripherals": {
+    "status": "asserted",
+    "value": [
+      {"kind": "qspi_flash",
+       "note": "The minimal design 'consists of four main elements: power, flash storage, crystal oscillator, and I/Os' — external QSPI flash holds the application (Hardware design with RP2040 §2, p.8). The bootrom can enumerate as USB mass storage without flash, but no application can be stored or run from it, so flash is treated as required for a functional board."},
+      {"kind": "crystal_12mhz",
+       "note": "A 12 MHz crystal (or an external CMOS clock into XIN) is required for accurate USB timing; the crystal is the preferred option (Hardware design with RP2040 §2.3, p.10-11)."}
+    ],
+    "source": {
+      "doc": "Hardware design with RP2040 (Raspberry Pi)",
+      "ref": "§2 Minimal design example / Figure 3 Schematic section RP2040 connections, p.8; §2.3 Crystal oscillator, p.10-11",
+      "url": "https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pins": {
+    "status": "asserted",
+    "value": [
+      {"name": "IOVDD", "kind": "power", "float_allowed": false,
+       "note": "Power supply for digital GPIOs, nominal 1.8-3.3 V (DS Table 1, p.12)."},
+      {"name": "DVDD", "kind": "power", "float_allowed": false,
+       "note": "Digital core supply, 1.1 V — connect to VREG_OUT, not to an external regulator (Hardware design §2.1.3, p.9)."},
+      {"name": "VREG_OUT", "kind": "power", "float_allowed": false,
+       "note": "Output of the internal 1.1 V LDO; wire it to the DVDD pins (Hardware design §2.1.3, p.9)."},
+      {"name": "GND", "kind": "ground", "float_allowed": false,
+       "note": "Single external ground connection bonded to a number of internal ground pads on the die (DS Table 1, p.12)."},
+      {"name": "RUN", "kind": "reset", "float_allowed": false,
+       "note": "Global asynchronous reset; tie directly to IOVDD if no external reset is needed (DS Table 1, p.12)."},
+      {"name": "TESTEN", "kind": "unspecified", "float_allowed": false,
+       "note": "Factory test mode pin — must be tied to GND (DS Table 1, p.12)."},
+      {"name": "XIN", "kind": "clock",
+       "note": "12 MHz crystal input, or a CMOS square wave at IOVDD level (Hardware design §2.3, p.11)."},
+      {"name": "XOUT", "kind": "clock",
+       "note": "12 MHz crystal output (Hardware design §2.3, p.11)."},
+      {"name": "SWCLK", "kind": "unspecified",
+       "note": "Serial Wire Debug multi-drop bus clock (DS Table 1, p.12)."},
+      {"name": "SWDIO", "kind": "unspecified",
+       "note": "Serial Wire Debug data (DS Table 1, p.12)."}
+    ],
+    "source": {
+      "doc": "RP2040 Datasheet",
+      "ref": "§1.4.2 Pin Descriptions Table 1, p.11-12",
+      "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "thermal_pad": {
+    "status": "asserted",
+    "value": {
+      "required": true,
+      "min_vias": null,
+      "applies_to_packages": ["QFN-56-7x7"],
+      "note": "Central GND pad (ePad) present. Notable warning: 'There is no standard size for the central GND pad (or ePad) with QFNs. However, the one on RP2040 is smaller than most. This means that standard 0.4mm QFN-56 footprints provided with CAD tools may need adjusting.' The reduced pad allows routing between the central pad and the peripheral pads. No thermal via count is stated (DS §5.1 Package, p.608; Figure 3 caption p.12 'reduced ePad size')."
+    },
+    "source": {
+      "doc": "RP2040 Datasheet",
+      "ref": "§5.1 Package, p.608; Figure 3 caption, p.12",
+      "url": "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf",
+      "accessed": "2026-07-30"
+    }
+  }
+}

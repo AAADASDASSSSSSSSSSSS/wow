@@ -1,0 +1,251 @@
+{
+  "device": "LP2985",
+  "device_class": "ldo",
+  "family": "LP2985",
+  "aliases": ["LP2985", "LP2985A", "LP2985-3.3", "LP2985A-3.3"],
+  "source": {
+    "doc": "LP2985/LP2985A 150mA Low-Noise Low-Dropout Regulator With Shutdown, SLVS522S (Texas Instruments, July 2004, revised May 2025)",
+    "ref": "Features and Description, p.1",
+    "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SOT-23-5-DBV"],
+    "source": {
+      "doc": "LP2985 SLVS522S",
+      "ref": "Features, p.1 — 'Package: 5-pin SOT-23 (DBV)'",
+      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 5,
+      "unit": "pins",
+      "note": "IN, OUT, GND, ON/OFF and BYPASS — a single package option, so no package condition applies.",
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "Features p.1 ('5-pin SOT-23 (DBV)'); Typical Application Circuit, p.1",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vin_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "chip_revision",
+      "combine": "first_match",
+      "on_unknown": "strictest",
+      "unit": "V",
+      "note": "TI ships two silicon revisions under one datasheet and specifies them separately throughout — this is a genuine second premise, not a source disagreement. With the revision undeclared, on_unknown='strictest' takes the new chip's higher 2.5 V floor so a 2.3 V design is not silently blessed. Note the very wide 16 V ceiling: this part tolerates a 12 V input where the AP2112 (6 V) cannot.",
+      "branches": [
+        {"when": {"chip_revision": "new"},
+         "value": {"kind": "range", "min": 2.5, "max": 16.0, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.3 Recommended Operating Conditions, p.4 — VIN supply input voltage (for new chip) 2.5 to 16 V",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "legacy"},
+         "value": {"kind": "range", "min": 2.2, "max": 16.0, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.3 Recommended Operating Conditions, p.4 — VIN supply input voltage (for legacy chip) 2.2 to 16 V",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "§5.3 Recommended Operating Conditions, p.4",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "abs_max_vin": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "chip_revision",
+      "combine": "min_of_matching",
+      "on_unknown": "strictest",
+      "unit": "V",
+      "note": "Continuous input voltage absolute maximum, again split by silicon revision. Unknown revision takes the lower 16 V limit, which is also where the recommended range tops out — so for the legacy chip the recommended maximum and the absolute maximum coincide, leaving no overshoot headroom at all.",
+      "branches": [
+        {"when": {"chip_revision": "new"},
+         "value": {"kind": "fixed", "value": 18.0, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.1 Absolute Maximum Ratings, p.4 — continuous input voltage range (for new chip) -0.3 to 18 V",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "legacy"},
+         "value": {"kind": "fixed", "value": 16.0, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.1 Absolute Maximum Ratings, p.4 — continuous input voltage range (for legacy chip) -0.3 to 16 V",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "§5.1 Absolute Maximum Ratings, p.4",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vout": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "chip_revision",
+      "combine": "first_match",
+      "on_unknown": "strictest",
+      "unit": "V",
+      "note": "Fixed-output part available in 100 mV steps across the range shown, so this slot records the AVAILABLE OPTION RANGE rather than one device's output. The two revisions differ: the legacy chip reaches 10 V, the new chip only 5.0 V — so a 6 V LP2985 exists only as legacy silicon. Output accuracy is +/-0.5% on the new chip, +/-1% for legacy A-grade and +/-1.5% for legacy standard grade.",
+      "branches": [
+        {"when": {"chip_revision": "new"},
+         "value": {"kind": "range", "min": 1.2, "max": 5.0, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.3 Recommended Operating Conditions, p.4 — VOUT (for new chip) 1.2 to 5.0 V; Features p.1 '1.2V to 5.0V (fixed, 100mV steps)'",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "legacy"},
+         "value": {"kind": "range", "min": 1.2, "max": 10.0, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.3 Recommended Operating Conditions, p.4 — VOUT (for legacy chip) 1.2 to 10.0 V",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "§5.3 Recommended Operating Conditions, p.4; Features, p.1",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "dropout_v": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "load_ma",
+      "combine": "max_of_matching",
+      "on_unknown": "strictest",
+      "unit": "V",
+      "note": "Dropout depends on BOTH load current and silicon revision, so each arm carries two conditions. The values below are the datasheet's OVER-TEMPERATURE maxima (-40 to 125 degC), which is the figure a rail-feasibility check should use; the 25 degC typicals are much lower (legacy 7/40/120/280 mV and new 11.5/98/120/180 mV at 1/10/50/150 mA). Load bands overlap at their edges and are combined with max_of_matching so the worse figure wins. At no load the maxima are 5 mV (legacy) and 3 mV (new). The revisions diverge sharply at full load: 575 mV for legacy versus 254 mV for the new chip, so a 3.3 V output from a 3.6 V Li-ion input is viable on new silicon and marginal on legacy. TI defines VDO as the input-to-output differential at which the output falls 100 mV below its value at a 1 V differential (footnote 1, p.7).",
+      "branches": [
+        {"when": {"chip_revision": "legacy", "load_ma": [0, 1]},
+         "value": {"kind": "fixed", "value": 0.015, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, VIN-VOUT dropout at IOUT = 1 mA, -40 to 125 degC, legacy chip, p.6 (15 mV)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "legacy", "load_ma": [1, 10]},
+         "value": {"kind": "fixed", "value": 0.09, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, dropout at IOUT = 10 mA, -40 to 125 degC, legacy chip, p.6 (90 mV)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "legacy", "load_ma": [10, 50]},
+         "value": {"kind": "fixed", "value": 0.225, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, dropout at IOUT = 50 mA, -40 to 125 degC, legacy chip, p.6 (225 mV)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "legacy", "load_ma": [50, 150]},
+         "value": {"kind": "fixed", "value": 0.575, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, dropout at IOUT = 150 mA, -40 to 125 degC, legacy chip, p.6 (575 mV; 350 mV max at 25 degC)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "new", "load_ma": [0, 1]},
+         "value": {"kind": "fixed", "value": 0.017, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, dropout at IOUT = 1 mA, -40 to 125 degC, new chip, p.6 (17 mV)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "new", "load_ma": [1, 10]},
+         "value": {"kind": "fixed", "value": 0.148, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, dropout at IOUT = 10 mA, -40 to 125 degC, new chip, p.6 (148 mV)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "new", "load_ma": [10, 50]},
+         "value": {"kind": "fixed", "value": 0.184, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, dropout at IOUT = 50 mA, -40 to 125 degC, new chip, p.6 (184 mV)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "new", "load_ma": [50, 150]},
+         "value": {"kind": "fixed", "value": 0.254, "unit": "V",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.5 Electrical Characteristics, dropout at IOUT = 150 mA, -40 to 125 degC, new chip, p.6 (254 mV; 198 mV max at 25 degC)",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "§5.5 Electrical Characteristics, VIN-VOUT dropout voltage rows, p.6; definition footnote 1, p.7",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "current_rating_ma": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 150.0,
+      "unit": "mA",
+      "note": "Continuous output current, stated as a range 0 to 150 mA in the Recommended Operating Conditions and as 'Output current: Up to 150mA' in the features. Short-circuit output current is separately given as 400 mA for the legacy chip and 375 mA for the new chip. NOTE for regulator-adequacy checks: 150 mA is NOT enough for an ESP32, which needs at least 500 mA (ESP32 datasheet Table 5-2 IVDD) — this part suits sensor and MCU rails, not a Wi-Fi SoC.",
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "§5.3 Recommended Operating Conditions, p.4 (IOUT 0 to 150 mA); Features p.1; §5.5 short output current rows, p.7",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_cin": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 1.0,
+      "unit": "uF",
+      "note": "Unlike the AMS1117 and MIC5219, this is an unconditional entry in TI's Recommended Operating Conditions table rather than an application-note suggestion — CIN has a stated minimum of 1 uF. Table footnote (1) applies: all capacitor values are assumed to derate to 50% of nominal, so a nominal part must be chosen accordingly.",
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "§5.3 Recommended Operating Conditions, p.4 — CIN input capacitor, min 1 uF, with footnote (1) on derating",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_cout": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "chip_revision",
+      "combine": "first_match",
+      "on_unknown": "strictest",
+      "unit": "uF",
+      "note": "The two revisions have materially different stability requirements: the legacy chip wants 2.2 to 4.7 uF, while the new chip accepts 1 to 200 uF with 2.2 uF nominal and is advertised as 'Stable with 2.2 uF ceramic capacitors'. With the revision unknown the strictest 2.2 uF floor applies. Three qualifications from the same table: (a) footnote 1 — capacitors derate to 50% of nominal, and an EFFECTIVE output capacitance of 1 uF minimum must be maintained for stability; (b) footnote 3 — maximum supported ESR on the new chip is 1 ohm, and for a higher-ESR output capacitor a low-ESR 100 nF MLCC must be placed close to the output pin; (c) legacy-chip ESR guidance lives in a separate 'Recommended Capacitors for the Legacy Chip' section.",
+      "branches": [
+        {"when": {"chip_revision": "new"},
+         "value": {"kind": "range", "min": 1.0, "max": 200.0, "unit": "uF",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.3 Recommended Operating Conditions, p.4 — COUT (for new chip) min 1 / nom 2.2 / max 200 uF; Features p.1 'Stable with 2.2uF ceramic capacitors (new chip)'",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"chip_revision": "legacy"},
+         "value": {"kind": "range", "min": 2.2, "max": 4.7, "unit": "uF",
+           "source": {"doc": "LP2985 SLVS522S", "ref": "§5.3 Recommended Operating Conditions, p.4 — COUT (for legacy chip) 2.2 to 4.7 uF",
+                      "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "§5.3 Recommended Operating Conditions, p.4 and its footnotes 1-3",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_bypass_cap": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 0.01,
+      "unit": "uF",
+      "note": "10 nF on the BYPASS pin. This is the capacitor the part's headline noise specification is measured with: 'Low noise: 30 uVRMS with 10nF bypass capacitor', and the Electrical Characteristics output-noise row states its conditions as CBYPASS = 10 nF, COUT = 2.2 uF, VOUT = 3.3 V, ILOAD = 150 mA. Ripple rejection is likewise specified at CBYPASS = 10 nF (78 dB new chip, 45 dB legacy at 1 kHz). Omitting it does not stop the regulator working but forfeits the low-noise behaviour that is the reason to choose this part. The Recommended Operating Conditions also give VBYPASS as 1.2 V. It appears in the datasheet's own Typical Application Circuit on p.1.",
+      "source": {
+        "doc": "LP2985 SLVS522S",
+        "ref": "Features p.1; Typical Application Circuit p.1; §5.5 Electrical Characteristics output noise voltage and ripple rejection rows, p.7; §5.3 VBYPASS row, p.4",
+        "url": "https://www.ti.com/lit/ds/symlink/lp2985.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

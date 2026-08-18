@@ -1,0 +1,113 @@
+{
+  "device": "USBLC6-2",
+  "device_class": "tvs",
+  "family": "USBLC6",
+  "aliases": ["USBLC6-2", "USBLC6-2SC6", "USBLC6-2P6"],
+  "source": {
+    "doc": "USBLC6-2 Very low capacitance ESD protection, DS4260 Rev 7 (STMicroelectronics, 24-Dec-2021)",
+    "ref": "Features, p.1",
+    "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SOT-666", "SOT23-6L"],
+    "source": {
+      "doc": "USBLC6-2 DS4260 Rev 7",
+      "ref": "Features p.1 ('SOT-666 and SOT23-6L packages'); §3.2 SOT-666 package information p.14",
+      "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 6,
+      "unit": "pins",
+      "note": "Both packages are 6-pin. The device is a monolithic array: two data-line channels plus a VBUS rail clamp, which is why it needs six pins rather than the two of a single-line diode.",
+      "source": {
+        "doc": "USBLC6-2 DS4260 Rev 7",
+        "ref": "Features p.1 (SOT-666 / SOT23-6L, both 6-lead); package outlines §3, p.14+",
+        "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vrwm_v": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 5.25,
+      "unit": "V",
+      "note": "ST does not publish a row literally named VRWM. 5.25 V is the reverse voltage at which leakage is specified (IRM at VRM = 5.25 V, typ 10 nA / max 150 nA), and the datasheet revision history records that this figure was set 'as specified in USB standard' — i.e. it is the intended standing rail voltage, 5 V VBUS plus tolerance. The breakdown voltage VBR between VBUS and GND is separately given as min 6 V at IR = 1 mA, so the device does not begin conducting until above the USB rail.",
+      "source": {
+        "doc": "USBLC6-2 DS4260 Rev 7",
+        "ref": "Table 2 Electrical characteristics, IRM and VBR rows, p.2; revision history rev 4 note, p.19",
+        "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clamping_v": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "surge_current_a",
+      "combine": "max_of_matching",
+      "on_unknown": "strictest",
+      "unit": "V",
+      "note": "Clamping voltage rises with surge current, so a single number would understate it under a real strike. Both figures are for any I/O pin to GND with an 8/20 us pulse. The datasheet also gives the analytical form in §2.1: VCL+ = VTRANSIL + VF, with VTRANSIL = VBR + Rd_TRANSIL x IP, and works an example at IEC 61000-4-2 level 4 contact discharge (8 kV through 330 ohm, so about 24 A) using typical Rd = 0.5 ohm.",
+      "branches": [
+        {"when": {"surge_current_a": [0, 1]}, "value": {"kind": "fixed", "value": 12.0, "unit": "V",
+          "source": {"doc": "USBLC6-2 DS4260 Rev 7", "ref": "Table 2 Electrical characteristics, VCL row at IPP = 1 A, 8/20 us, any I/O pin to GND, p.2",
+                     "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"surge_current_a": [1, 5]}, "value": {"kind": "fixed", "value": 17.0, "unit": "V",
+          "source": {"doc": "USBLC6-2 DS4260 Rev 7", "ref": "Table 2 Electrical characteristics, VCL row at IPP = 5 A, 8/20 us, any I/O pin to GND, p.2",
+                     "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "USBLC6-2 DS4260 Rev 7",
+        "ref": "Table 2 Electrical characteristics, VCL rows, p.2; §2.1 Surge protection, p.4",
+        "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "capacitance_pf": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 3.5,
+      "unit": "pF",
+      "note": "MAXIMUM I/O-to-GND capacitance at VR = 1.65 V (typical 2.5 pF). This is the number that makes the part usable on USB 2.0 high-speed lines at 480 Mb/s, and it is roughly 20x lower than a general-purpose ESD diode such as the PESD5V0L1BA at 75 pF. Two related figures matter for differential integrity: I/O-to-I/O capacitance is typ 1.2 / max 1.7 pF, and the I/O-to-GND matching tolerance is 0.015 pF, which the datasheet calls out as giving consistent D+/D- balance compliant with USB 2.0 requirements.",
+      "source": {
+        "doc": "USBLC6-2 DS4260 Rev 7",
+        "ref": "Table 2 Electrical characteristics, Ci/o-GND, dCi/o-GND, Ci/o-i/o rows, p.2; Features and Benefits, p.1",
+        "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "channels": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 2,
+      "unit": "lines",
+      "note": "Two data-line channels (D+ and D-), plus a separate clamp on VBUS which the datasheet lists as its own feature ('Protects VBUS') rather than as a third data channel. So one USBLC6-2 covers a complete USB 2.0 port. ESD rating is IEC 61000-4-2 level 4: 15 kV air discharge and 8 kV contact discharge, guaranteed at device level.",
+      "source": {
+        "doc": "USBLC6-2 DS4260 Rev 7",
+        "ref": "Features p.1 ('2 data-line protection', 'Protects VBUS', IEC 61000-4-2 level 4 figures)",
+        "url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

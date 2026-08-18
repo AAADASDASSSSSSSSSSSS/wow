@@ -1,0 +1,318 @@
+{
+  "device": "ESP32",
+  "device_class": "mcu",
+  "family": "ESP32",
+  "aliases": [
+    "ESP32-D0WD",
+    "ESP32-D0WD-V3",
+    "ESP32-D0WDQ6",
+    "ESP32-D0WDQ6-V3",
+    "ESP32-D0WDR2-V3",
+    "ESP32-D0WDRH2-V3",
+    "ESP32-U4WDH",
+    "ESP32-WROOM-32",
+    "ESP32-WROOM"
+  ],
+  "excludes": [
+    "ESP32-S",
+    "ESP32-C",
+    "ESP32-H",
+    "ESP32-P"
+  ],
+  "source": {
+    "doc": "ESP32 Series Datasheet v5.2 (Espressif Systems)",
+    "ref": "Table 1-1 ESP32 Series Comparison, p.11",
+    "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["QFN48-5x5", "QFN48-6x6"],
+    "source": {
+      "doc": "ESP32 Series Datasheet v5.2",
+      "ref": "Table 1-1 Series Comparison p.11; Figure 6-1 QFN48 (6x6 mm) and Figure 6-2 QFN48 (5x5 mm), p.60",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 48,
+      "unit": "pins",
+      "note": "Both the 5x5 mm and 6x6 mm variants are QFN48, so the count does not depend on the package here.",
+      "source": {
+        "doc": "ESP32 Series Datasheet v5.2",
+        "ref": "Figure 6-1 / 6-2 QFN48 packages, p.60; pin overview Table 2-1, p.14-15",
+        "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "in_package_flash_or_psram",
+      "combine": "first_match",
+      "on_unknown": "strictest",
+      "unit": "V",
+      "note": "The datasheet DOES have an authoritative table — it is called 'Recommended Power Supply Characteristics' (Table 5-2, §5.2, p.52), not 'Recommended Operating Conditions'. Its minimum column reads '2.3/3.0' with footnote 2 resolving which applies: 3.0 V for chips carrying 3.3 V flash or PSRAM in-package, 2.3 V for chips without. So the two premises are genuinely different chip variants, NOT disagreeing sources. Variants with in-package flash/PSRAM: ESP32-U4WDH (4 MB flash), ESP32-D0WDR2-V3 and ESP32-D0WDRH2-V3 (2 MB PSRAM). Variants without: ESP32-D0WD, ESP32-D0WD-V3, ESP32-D0WDQ6, ESP32-D0WDQ6-V3 (Table 1-1, p.11). on_unknown is 'strictest' (3.0 V floor) because the variant is often not declared in a requirement and the tighter floor is the safe default. Absolute maximum for all supply pins is 3.6 V (Table 5-1, p.52).",
+      "branches": [
+        {"when": {"in_package_flash_or_psram": true},
+         "value": {"kind": "range", "min": 3.0, "max": 3.6, "unit": "V",
+           "source": {"doc": "ESP32 Series Datasheet v5.2",
+                      "ref": "Table 5-2 Recommended Power Supply Characteristics, p.52, footnote 2 — 'Chips with a 3.3 V flash or PSRAM in-package: this minimum voltage is 3.0 V'",
+                      "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+                      "accessed": "2026-07-30"}}},
+        {"when": {"in_package_flash_or_psram": false},
+         "value": {"kind": "range", "min": 2.3, "max": 3.6, "unit": "V",
+           "source": {"doc": "ESP32 Series Datasheet v5.2",
+                      "ref": "Table 5-2 Recommended Power Supply Characteristics, p.52, footnote 2 — 'Chips with no flash or PSRAM in-package: this minimum voltage is 2.3 V'",
+                      "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+                      "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "ESP32 Series Datasheet v5.2",
+        "ref": "§5.2 Table 5-2 Recommended Power Supply Characteristics, p.52 (VDDA/VDD3P3_RTC/VDD3P3/VDD_SDIO: min 2.3/3.0 per footnote 2, typ 3.3, max 3.6 V)",
+        "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_rails": {
+    "status": "asserted",
+    "value": [
+      {"name": "VDDA", "min_v": 2.3, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "note": "Analog power supply, pin 1 (DS Table 2-1, p.14)."},
+      {"name": "VDD3P3", "min_v": 2.3, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "note": "Analog/RF power supply, pins 3 and 4. Each needs its own 10 uF plus a CLC/LC filter near the pins (DS Table 2-1 p.14; HW guidelines §1.4.2 p.19)."},
+      {"name": "VDD3P3_RTC", "min_v": 2.3, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "min_current_ma": 500,
+       "note": "Input power supply for RTC IO, pin 19 (DS Table 2-1, p.14). The 500 mA figure is the recommended single-supply current for the whole chip (HW guidelines §1.3.2, p.5)."},
+      {"name": "VDD3P3_CPU", "min_v": 1.8, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "note": "Input power supply for CPU IO, pin 37 (DS Table 2-1, p.15)."},
+      {"name": "VDD_SDIO", "origin": "internal_ldo",
+       "note": "OUTPUT power supply, pin 26: 1.8 V or the same voltage as VDD3P3_RTC, produced by the internal SDIO-LDO. Must NOT be driven externally (DS Table 2-1 p.15; DS p.62 note 3)."}
+    ],
+    "source": {
+      "doc": "ESP32 Series Datasheet v5.2",
+      "ref": "Table 2-1 Pin Overview p.14-15; §2.5.1 Power Pins p.17; p.62 note 3 (power domains)",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "freq_vs_supply": {
+    "status": "not_applicable",
+    "reason": "There is no voltage-derated frequency table for the ESP32: the CPU clock comes from the PLL fed by the fixed 40 MHz crystal, and the datasheet states no maximum-frequency-versus-supply relationship (contrast the AVR speed grades). The crystal itself is a single mandated value, captured in clock_external."
+  },
+
+  "clock_external": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 40.0,
+      "unit": "MHz",
+      "tolerance_ppm": 10,
+      "note": "The external crystal clock source is COMPULSORY and the ESP32 firmware only supports a 40 MHz crystal; accuracy must be within +/-10 ppm. A series inductor is required on the XTAL_P clock trace (0 ohm initially, adjusted after testing).",
+      "source": {
+        "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+        "ref": "§1.3.5 Clock Source, p.9 (PDF p.12)",
+        "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clock_layout": {
+    "status": "asserted",
+    "value": {
+      "min_gap_to_clock_pin_mm": 2.7,
+      "vias_in_clock_trace_allowed": false,
+      "keepout_under": true,
+      "ground_guard": true,
+      "note": "Complete GND plane under RF, crystal and chip. The crystal must sit at least 2.7 mm from the clock pin, with high-density ground via stitching around the clock trace. No vias on the clock input/output traces. Series components go on the chip side; matching capacitors sit at the two sides of the crystal at the end of the clock trace so their ground pads are close to the crystal's. Do not route any signal trace under the crystal, keep power-trace vias as far from the clock trace as possible, and keep magnetic components away.",
+      "source_note": "All of the above from §1.4.3."
+    },
+    "source": {
+      "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.4.3 Crystal, p.22 (PDF p.25)",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "decoupling": {
+    "status": "asserted",
+    "value": {
+      "per_pin": [
+        {
+          "pin_group": "main power entrance",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 10.0,
+            "unit": "uF",
+            "note": "At least 10 uF, together with an ESD protection diode, where the external supply enters the PCB.",
+            "source": {
+              "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+              "ref": "§1.3.2 Power Supply, p.5 (PDF p.9)",
+              "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+              "accessed": "2026-07-30"
+            }
+          }
+        },
+        {
+          "pin_group": "VDD3P3",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 10.0,
+            "unit": "uF",
+            "note": "When the chip power entrance is not near VDD3P3, add a 10 uF capacitor at BOTH the chip power entrance and VDD3P3; if they are close the two can be merged into one. Add an LC circuit on the VDD3P3 rail to suppress high-frequency harmonics, with the inductor rated 500 mA or above.",
+            "source": {
+              "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+              "ref": "§1.4.2 Power Supply layout, p.19-20 (PDF p.23); §1.3.2 p.6 (PDF p.10)",
+              "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+              "accessed": "2026-07-30"
+            }
+          }
+        }
+      ],
+      "per_supply_pair_required": true,
+      "per_supply_pair_note": "Place appropriate decoupling capacitors at the rest of the power pins; ground vias should be added close to each capacitor's ground pad to ensure a short return path (HW guidelines §1.4.2, p.19, PDF p.23). No capacitance is stated for those remaining pins, so no value is asserted.",
+      "bulk": {
+        "kind": "qualitative",
+        "text": "Branch the power in a star layout after the entrance capacitor to reduce pin-to-pin coupling; the guidelines give no additional bulk value beyond the 10 uF entrance capacitor.",
+        "source": {
+          "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+          "ref": "§1.4.2 Power Supply layout, p.19 (PDF p.23)",
+          "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+          "accessed": "2026-07-30"
+        }
+      },
+      "max_distance_mm": null,
+      "placement_note": "Ground pads of the chip and of the surrounding components must make full contact with the ground copper pour rather than being connected through traces (HW guidelines §1.4.2, p.19, PDF p.23). No numeric distance is stated."
+    },
+    "source": {
+      "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.3.2 Power Supply p.5-6; §1.4.2 Power Supply layout p.19-20",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "reset": {
+    "status": "asserted",
+    "value": {
+      "external_required": true,
+      "details": "CHIP_PU (pin 9) enables the chip when high and resets it when low. The datasheet states explicitly: 'Do not leave the CHIP_PU pin floating' (DS Table 2-1, p.14). When the ESP32 runs from a 3.3 V system supply the rails need time to stabilise before CHIP_PU is pulled up, so CHIP_PU must be asserted high AFTER the 3.3 V rail is stable — which is why an RC delay on CHIP_PU is part of the reference design (HW guidelines §1.3.3 Chip Power-up and Reset Timing, p.7, PDF p.10). Unlike the STM32 and AVR this is a required external network rather than an optional one."
+    },
+    "source": {
+      "doc": "ESP32 Series Datasheet v5.2",
+      "ref": "Table 2-1 Pin Overview, CHIP_PU pin 9, p.14; HW guidelines §1.3.3, p.7",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "boot_strapping": {
+    "status": "asserted",
+    "value": [
+      {"pin": "GPIO0", "required_state": "high for normal boot, low for download boot",
+       "note": "Strapping pin sampled at startup/reset; afterwards it works as a normal function pin (HW guidelines §1.3.9 p.13, PDF p.16; DS Table 3-1 Default Configuration of Strapping Pins p.22)."},
+      {"pin": "GPIO2", "required_state": "defined level at reset",
+       "note": "Strapping pin (HW guidelines §1.3.9, p.13)."},
+      {"pin": "GPIO5", "required_state": "defined level at reset",
+       "note": "Strapping pin (HW guidelines §1.3.9, p.13)."},
+      {"pin": "MTDI", "required_state": "defined level at reset",
+       "note": "GPIO12. Strapping pin — selects the VDD_SDIO voltage of the internal LDO (HW guidelines §1.3.9, p.13; DS Table 3-1, p.22)."},
+      {"pin": "MTDO", "required_state": "defined level at reset",
+       "note": "GPIO15. Strapping pin (HW guidelines §1.3.9, p.13; DS Table 3-1, p.22)."}
+    ],
+    "source": {
+      "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.3.9 Strapping Pins, p.13 (PDF p.16) — 'GPIO0, GPIO2, GPIO5, MTDI, and MTDO are strapping pins'; detail in ESP32 Series Datasheet Table 3-1, p.22",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "mandatory_peripherals": {
+    "status": "asserted",
+    "value": [
+      {"kind": "crystal_40mhz",
+       "note": "The external crystal clock source is listed as Compulsory and the firmware supports only 40 MHz +/-10 ppm (HW guidelines §1.3.5, p.9, PDF p.12). Unlike the AVR and STM32 there is no internal RC fallback for the main clock."},
+      {"kind": "spi_flash",
+       "note": "External quad SPI flash is required unless an in-package-flash variant is used (ESP32-U4WDH carries 4 MB in-package flash). See HW guidelines §1.3.4 Flash and PSRAM, p.6-7 (PDF p.8) and DS Table 1-1, p.11."}
+    ],
+    "source": {
+      "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.3.5 Clock Source p.9 (crystal 'Compulsory'); §1.3.4 Flash and PSRAM p.6-7",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pins": {
+    "status": "asserted",
+    "value": [
+      {"name": "VDDA", "kind": "power", "float_allowed": false,
+       "note": "Pin 1, analog supply 2.3-3.6 V (DS Table 2-1, p.14)."},
+      {"name": "VDD3P3", "kind": "power", "float_allowed": false,
+       "note": "Pins 3 and 4, RF analog supply 2.3-3.6 V (DS Table 2-1, p.14)."},
+      {"name": "VDD3P3_RTC", "kind": "power", "float_allowed": false,
+       "note": "Pin 19, RTC IO supply 2.3-3.6 V (DS Table 2-1, p.14)."},
+      {"name": "VDD3P3_CPU", "kind": "power", "float_allowed": false,
+       "note": "Pin 37, CPU IO supply 1.8-3.6 V (DS Table 2-1, p.15)."},
+      {"name": "VDD_SDIO", "kind": "power", "float_allowed": true,
+       "note": "Pin 26 is an OUTPUT of the internal SDIO-LDO — do not drive it (DS Table 2-1, p.15)."},
+      {"name": "CHIP_PU", "kind": "reset", "float_allowed": false,
+       "note": "Pin 9. 'Do not leave the CHIP_PU pin floating' (DS Table 2-1, p.14)."},
+      {"name": "XTAL_P", "kind": "clock",
+       "note": "40 MHz crystal positive; needs a series inductor on the trace (HW guidelines §1.3.5, p.9)."},
+      {"name": "XTAL_N", "kind": "clock",
+       "note": "40 MHz crystal negative (HW guidelines §1.3.5, p.9)."},
+      {"name": "SENSOR_VP", "kind": "input_only",
+       "note": "GPIO36. Input only — output is not supported due to the lack of pull-up/pull-down resistors and output driver (DS §2.5 p.17; DS p.62 note 2)."},
+      {"name": "SENSOR_CAPP", "kind": "input_only",
+       "note": "GPIO37. Input only (DS p.62 note 2)."},
+      {"name": "SENSOR_CAPN", "kind": "input_only",
+       "note": "GPIO38. Input only (DS p.62 note 2)."},
+      {"name": "SENSOR_VN", "kind": "input_only",
+       "note": "GPIO39. Input only (DS p.62 note 2)."},
+      {"name": "VDET_1", "kind": "input_only",
+       "note": "GPIO34. Input only (DS p.62 note 2)."},
+      {"name": "VDET_2", "kind": "input_only",
+       "note": "GPIO35. Input only (DS p.62 note 2)."}
+    ],
+    "source": {
+      "doc": "ESP32 Series Datasheet v5.2",
+      "ref": "Table 2-1 Pin Overview p.14-15; §2.5 p.17; p.62 notes 2-3 (input-only pins and power domains)",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "thermal_pad": {
+    "status": "asserted",
+    "value": {
+      "required": true,
+      "min_vias": 9,
+      "applies_to_packages": ["QFN48-5x5", "QFN48-6x6"],
+      "note": "'The ground pad at the bottom of the chip should be connected to the ground plane through at least nine ground vias.' The ground pads of the chip and surrounding components must contact the copper pour directly rather than through traces. For a module EPAD, a square grid with solder paste and ground vias in the gaps is recommended to limit solder leakage (HW guidelines §1.4.2, p.19-20, PDF p.23)."
+    },
+    "source": {
+      "doc": "ESP32 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.4.2 Power Supply layout, p.19-20 (PDF p.23)",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/",
+      "accessed": "2026-07-30"
+    }
+  }
+}

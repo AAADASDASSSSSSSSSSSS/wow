@@ -1,0 +1,124 @@
+{
+  "device": "X322516MLB4SI",
+  "device_class": "crystal",
+  "family": "YXC X3225",
+  "aliases": ["X322516MLB4SI", "C13738", "16MHz SMD3225"],
+  "source": {
+    "doc": "LCSC / JLCPCB catalog product page for X322516MLB4SI (YXC Crystal Oscillators), LCSC C13738",
+    "ref": "Specifications table (JSON-LD PropertyValue block); JLCPCB in-stock catalog record C13738, stock 443913, Basic part",
+    "url": "https://www.lcsc.com/product-detail/C13738.html",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SMD3225-4P"],
+    "source": {
+      "doc": "LCSC product page C13738 (X322516MLB4SI, YXC)",
+      "ref": "Specifications: Package = SMD3225-4P; catalog record joints = 4",
+      "url": "https://www.lcsc.com/product-detail/C13738.html",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 4,
+      "unit": "pins",
+      "note": "Same 3225 four-pad outline as the 12 MHz sibling: two crystal terminals plus two shield pads that must be grounded. The footprint is interchangeable between the two parts even though their electrical parameters are not.",
+      "source": {
+        "doc": "LCSC product page C13738 (X322516MLB4SI, YXC)",
+        "ref": "Package SMD3225-4P; JLCPCB catalog record joints = 4",
+        "url": "https://www.lcsc.com/product-detail/C13738.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "freq_mhz": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 16.0,
+      "unit": "MHz",
+      "note": "16 MHz is the classic ATmega328P speed, and per the AVR speed grades it requires at least 4.5 V — at 3.3 V the device is limited to 10 MHz, so this crystal only belongs on a 5 V AVR board. Second most stocked crystal in the JLCPCB catalog at 443,913 units and a Basic part.",
+      "source": {
+        "doc": "LCSC product page C13738 (X322516MLB4SI, YXC)",
+        "ref": "Specifications: Frequency = 16MHz; catalog record stock 443913, basic = 1",
+        "url": "https://www.lcsc.com/product-detail/C13738.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "load_capacitance_pf": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 9.0,
+      "unit": "pF",
+      "note": "CL = 9 pF — less than half the 20 pF of the 12 MHz part in the same package and series. A 22 pF load-capacitor pair, the reflex choice for AVR boards, would be badly wrong here: with CL = 9 pF and 5 pF of stray capacitance the external capacitors work out around 8 pF each, not 22 pF. This is the single strongest argument for recording CL per part rather than treating crystals as interchangeable.",
+      "source": {
+        "doc": "LCSC product page C13738 (X322516MLB4SI, YXC)",
+        "ref": "Specifications: Load Capacitance = 9pF",
+        "url": "https://www.lcsc.com/product-detail/C13738.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "esr_max_ohm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 50.0,
+      "unit": "ohm",
+      "note": "50 ohm, exactly at the RP2040's stated 50 ohm ceiling — though 16 MHz is not an RP2040 frequency, so that comparison is informational. Notably better than the 12 MHz sibling's 80 ohm despite the identical package and series, which is a reminder that ESR tracks the individual part rather than the outline. Value taken from the LCSC product-page specification table because the catalog dump omits ESR and the LCSC datasheet link returns an HTML interstitial.",
+      "source": {
+        "doc": "LCSC product page C13738 (X322516MLB4SI, YXC)",
+        "ref": "Specifications: Equivalent Series Resistance(ESR) = 50 ohm",
+        "url": "https://www.lcsc.com/product-detail/C13738.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "drive_level_uw": {
+    "status": "not_asserted",
+    "reason": "Not published in the LCSC product-page specification table or the JLCPCB catalog record. Sources tried: LCSC product page C13738 JSON-LD specification block (Package, Frequency, Frequency Stability, Operating Temperature, Load Capacitance, ESR, Normal temperature Frequency Tolerance); JLCPCB catalog `extra.attributes` for C13738; the LCSC datasheet link returns an HTML anti-bot page rather than the YXC PDF. Next step: YXC X3225 series datasheet from the manufacturer."
+  },
+
+  "frequency_tolerance_ppm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 10.0,
+      "unit": "ppm",
+      "note": "Room-temperature tolerance; add the +/-20 ppm stability for the worst case.",
+      "source": {
+        "doc": "LCSC product page C13738 (X322516MLB4SI, YXC)",
+        "ref": "Specifications: Normal temperature Frequency Tolerance = +/-10ppm",
+        "url": "https://www.lcsc.com/product-detail/C13738.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "frequency_stability_ppm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 20.0,
+      "unit": "ppm",
+      "note": "Drift over -40 to +85 degC, giving about +/-30 ppm worst case in total. Adequate for an AVR running UART at standard baud rates, where the tolerance budget is percent-level rather than ppm-level.",
+      "source": {
+        "doc": "LCSC product page C13738 (X322516MLB4SI, YXC)",
+        "ref": "Specifications: Frequency Stability = +/-20ppm; Operating Temperature = -40C to +85C",
+        "url": "https://www.lcsc.com/product-detail/C13738.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

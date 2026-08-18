@@ -226,5 +226,9 @@ backend/bin/
 .t2/
 tests/.tmp-*/
 .build-cache/
-data/
+# Anchored to the repo root on purpose: this is the runtime workspace
+# (RATSNESTPRO_WORKSPACE_ROOT). An unanchored "data/" also matched
+# src/RatsNestPro-main/.../ratsnestpro/data/, which is packaged source data
+# (fact sheets, process capability) and must stay tracked.
+/data/
 deploy/evidence/

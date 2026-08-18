@@ -1,0 +1,124 @@
+{
+  "device": "X322512MSB4SI",
+  "device_class": "crystal",
+  "family": "YXC X3225",
+  "aliases": ["X322512MSB4SI", "C9002", "12MHz SMD3225"],
+  "source": {
+    "doc": "LCSC / JLCPCB catalog product page for X322512MSB4SI (YXC Crystal Oscillators), LCSC C9002",
+    "ref": "Specifications table (JSON-LD PropertyValue block); JLCPCB in-stock catalog record C9002, stock 641549, Basic part",
+    "url": "https://www.lcsc.com/product-detail/C9002.html",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SMD3225-4P"],
+    "source": {
+      "doc": "LCSC product page C9002 (X322512MSB4SI, YXC)",
+      "ref": "Specifications: Package = SMD3225-4P; catalog record joints = 4",
+      "url": "https://www.lcsc.com/product-detail/C9002.html",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 4,
+      "unit": "pins",
+      "note": "3225 four-pad outline: two crystal terminals plus two grounded shield pads. The shield pads must be tied to ground — they are not no-connects.",
+      "source": {
+        "doc": "LCSC product page C9002 (X322512MSB4SI, YXC)",
+        "ref": "Package SMD3225-4P; JLCPCB catalog record joints = 4",
+        "url": "https://www.lcsc.com/product-detail/C9002.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "freq_mhz": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 12.0,
+      "unit": "MHz",
+      "note": "12 MHz is the frequency the RP2040 requires — its hardware design guide calls a 12 MHz crystal the preferred external source and needs it for accurate USB timing. This part is also a JLCPCB Basic part (no per-part assembly setup fee) and the single most stocked crystal in the catalog at 641,549 units, which is why it was chosen over recollection.",
+      "source": {
+        "doc": "LCSC product page C9002 (X322512MSB4SI, YXC)",
+        "ref": "Specifications: Frequency = 12MHz; catalog record stock 641549, basic = 1",
+        "url": "https://www.lcsc.com/product-detail/C9002.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "load_capacitance_pf": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 20.0,
+      "unit": "pF",
+      "note": "CL = 20 pF. This is the number that sets the two load capacitors, and it is NOT transferable between crystals: the 16 MHz sibling X322516MLB4SI is 9 pF and the 40 MHz TXM40M0004252HBCEO00T is 15 pF. Using a habitual 22 pF pair here without checking CL and subtracting stray capacitance is how an oscillator ends up off-frequency or refusing to start.",
+      "source": {
+        "doc": "LCSC product page C9002 (X322512MSB4SI, YXC)",
+        "ref": "Specifications: Load Capacitance = 20pF",
+        "url": "https://www.lcsc.com/product-detail/C9002.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "esr_max_ohm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 80.0,
+      "unit": "ohm",
+      "note": "CAUTION — 80 ohm EXCEEDS the RP2040's stated crystal requirement. Raspberry Pi's hardware design guide picks a crystal with a maximum ESR of 50 ohm and pairs it with a 1 kOhm series resistor to avoid over-driving it at IOVDD = 3.3 V. So the most-stocked, cheapest, Basic-part 12 MHz crystal is out of specification for the very MCU that mandates 12 MHz. It may still start, but the drive margin is reduced and the series resistor would need re-evaluating. This is precisely the kind of mismatch that only becomes visible once both the MCU requirement and the crystal parameter are recorded as facts. Note the value came from the LCSC product page rather than the manufacturer datasheet: the catalog dump omits ESR, and the LCSC datasheet link for this part returns an HTML interstitial instead of a PDF.",
+      "source": {
+        "doc": "LCSC product page C9002 (X322512MSB4SI, YXC)",
+        "ref": "Specifications: Equivalent Series Resistance(ESR) = 80 ohm",
+        "url": "https://www.lcsc.com/product-detail/C9002.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "drive_level_uw": {
+    "status": "not_asserted",
+    "reason": "Neither the LCSC product-page specification table nor the JLCPCB catalog record publishes a drive level for this part. Sources tried: LCSC product page C9002 JSON-LD specification block (Package, Frequency, Frequency Stability, Operating Temperature, Load Capacitance, ESR, Normal temperature Frequency Tolerance — no drive level); JLCPCB catalog `extra.attributes` for C9002 (same field set); the LCSC datasheet link for this part returns an HTML anti-bot page rather than the YXC PDF. Next step: obtain the YXC X3225 series datasheet directly from the manufacturer, which normally states drive level around 100 to 300 uW for this outline."
+  },
+
+  "frequency_tolerance_ppm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 10.0,
+      "unit": "ppm",
+      "note": "Room-temperature tolerance only. It must be added to the +/-20 ppm temperature stability before comparing against a system requirement — see the note on frequency_stability_ppm.",
+      "source": {
+        "doc": "LCSC product page C9002 (X322512MSB4SI, YXC)",
+        "ref": "Specifications: Normal temperature Frequency Tolerance = +/-10ppm",
+        "url": "https://www.lcsc.com/product-detail/C9002.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "frequency_stability_ppm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 20.0,
+      "unit": "ppm",
+      "note": "Drift over -40 to +85 degC. Combined with the +/-10 ppm room-temperature tolerance the worst-case error is about +/-30 ppm, which is why a part advertised as '+/-10 ppm' does NOT satisfy a +/-10 ppm system requirement such as the one Espressif states for the ESP32 main crystal. Every readily stocked 40 MHz part checked has the same problem or worse.",
+      "source": {
+        "doc": "LCSC product page C9002 (X322512MSB4SI, YXC)",
+        "ref": "Specifications: Frequency Stability = +/-20ppm; Operating Temperature = -40C to +85C",
+        "url": "https://www.lcsc.com/product-detail/C9002.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

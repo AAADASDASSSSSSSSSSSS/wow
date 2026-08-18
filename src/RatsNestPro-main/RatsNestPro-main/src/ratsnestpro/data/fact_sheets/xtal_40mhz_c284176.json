@@ -1,0 +1,124 @@
+{
+  "device": "TXM40M0004252HBCEO00T",
+  "device_class": "crystal",
+  "family": "TAE TXM",
+  "aliases": ["TXM40M0004252HBCEO00T", "C284176", "40MHz SMD2520"],
+  "source": {
+    "doc": "LCSC / JLCPCB catalog product page for TXM40M0004252HBCEO00T (TAE, Zhejiang Abel Elec / Yajingxin), LCSC C284176",
+    "ref": "Specifications table (JSON-LD PropertyValue block); JLCPCB in-stock catalog record C284176, stock 44976",
+    "url": "https://www.lcsc.com/product-detail/C284176.html",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SMD2520-4P"],
+    "source": {
+      "doc": "LCSC product page C284176 (TXM40M0004252HBCEO00T, TAE)",
+      "ref": "Specifications: Package = SMD2520-4P; catalog record joints = 4",
+      "url": "https://www.lcsc.com/product-detail/C284176.html",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 4,
+      "unit": "pins",
+      "note": "2520 four-pad outline — 2.5 x 2.0 mm, smaller than the 3225 parts, which suits the tight crystal-to-pin spacing Espressif asks for (2.7 mm on ESP32, 2.0 mm on ESP32-C3). NOT footprint-compatible with the SMD3225-4P crystals in this roster.",
+      "source": {
+        "doc": "LCSC product page C284176 (TXM40M0004252HBCEO00T, TAE)",
+        "ref": "Package SMD2520-4P; JLCPCB catalog record joints = 4",
+        "url": "https://www.lcsc.com/product-detail/C284176.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "freq_mhz": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 40.0,
+      "unit": "MHz",
+      "note": "40 MHz is mandatory for the ESP32 and ESP32-C3 — Espressif states the firmware supports only a 40 MHz crystal, and the external crystal is listed as Compulsory rather than optional. Chosen over the YXC X322540MPB4SI (C9010, 40,918 in stock) despite near-identical availability because this part publishes its ESR, which is the parameter crystal selection actually turns on. Neither 40 MHz option is a JLCPCB Basic part, so either way an assembly setup fee applies.",
+      "source": {
+        "doc": "LCSC product page C284176 (TXM40M0004252HBCEO00T, TAE)",
+        "ref": "Specifications: Frequency = 40MHz; catalog record stock 44976, basic = 0",
+        "url": "https://www.lcsc.com/product-detail/C284176.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "load_capacitance_pf": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 15.0,
+      "unit": "pF",
+      "note": "CL = 15 pF — a third value again, against 20 pF for the 12 MHz part and 9 pF for the 16 MHz part. Espressif's reference designs place the two matching capacitors at the two sides of the crystal at the end of the clock trace so their ground pads sit close to the crystal's.",
+      "source": {
+        "doc": "LCSC product page C284176 (TXM40M0004252HBCEO00T, TAE)",
+        "ref": "Specifications: Load Capacitance = 15pF",
+        "url": "https://www.lcsc.com/product-detail/C284176.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "esr_max_ohm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 25.0,
+      "unit": "ohm",
+      "note": "25 ohm — the lowest of the three crystals in this roster and comfortably inside the RP2040's 50 ohm ceiling, though 40 MHz is not an RP2040 frequency. Low ESR matters more at 40 MHz than at 12 MHz because the oscillator has less gain margin to spare. This is the reason this part was preferred over C9010, whose ESR is not published anywhere reachable.",
+      "source": {
+        "doc": "LCSC product page C284176 (TXM40M0004252HBCEO00T, TAE)",
+        "ref": "Specifications: Equivalent Series Resistance(ESR) = 25 ohm",
+        "url": "https://www.lcsc.com/product-detail/C284176.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "drive_level_uw": {
+    "status": "not_asserted",
+    "reason": "Not published in the LCSC product-page specification table or the JLCPCB catalog record. Sources tried: LCSC product page C284176 JSON-LD specification block (Package, Frequency, Frequency Stability, Operating Temperature, Load Capacitance, ESR, Normal temperature Frequency Tolerance); JLCPCB catalog `extra.attributes` for C284176; the LCSC datasheet link for this part returns an HTML anti-bot page rather than the manufacturer PDF. Next step: TAE / Zhejiang Abel TXM series datasheet from the manufacturer. Drive level matters here because Espressif asks for a series component on the XTAL_P trace (24 nH suggested on the C3, 0 ohm on the ESP32) partly to manage exactly this."
+  },
+
+  "frequency_tolerance_ppm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 10.0,
+      "unit": "ppm",
+      "note": "Room-temperature tolerance. On its own this matches Espressif's stated +/-10 ppm requirement — but see frequency_stability_ppm, because the requirement is not met once temperature drift is included.",
+      "source": {
+        "doc": "LCSC product page C284176 (TXM40M0004252HBCEO00T, TAE)",
+        "ref": "Specifications: Normal temperature Frequency Tolerance = +/-10ppm",
+        "url": "https://www.lcsc.com/product-detail/C284176.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "frequency_stability_ppm": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 30.0,
+      "unit": "ppm",
+      "note": "THE TRAP THIS SLOT EXISTS FOR. Espressif requires the ESP32 main crystal accuracy to be within +/-10 ppm. This part is +/-10 ppm at room temperature but drifts +/-30 ppm over -40 to +85 degC, so worst-case total error is around +/-40 ppm — four times the stated requirement. The alternative YXC C9010 is +/-20 ppm stability, still over budget. NO readily stocked 40 MHz crystal checked in the JLCPCB catalog meets +/-10 ppm across temperature; doing so needs a tighter-grade part at higher cost, or acceptance that the board will not hold Wi-Fi frequency accuracy at temperature extremes. A board built from the cheapest in-stock 40 MHz crystal will assemble and probably associate at room temperature, which is exactly why this is worth recording as a fact rather than discovering in certification.",
+      "source": {
+        "doc": "LCSC product page C284176 (TXM40M0004252HBCEO00T, TAE)",
+        "ref": "Specifications: Frequency Stability = +/-30ppm; Operating Temperature = -40C to +85C",
+        "url": "https://www.lcsc.com/product-detail/C284176.html",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

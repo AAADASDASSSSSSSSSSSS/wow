@@ -1,0 +1,147 @@
+{
+  "device": "AMS1117-3.3",
+  "device_class": "ldo",
+  "family": "AMS1117",
+  "aliases": ["AMS1117", "AMS1117-3.3", "AMS1117CD-3.3", "AMS1117CS-3.3"],
+  "source": {
+    "doc": "AMS1117 1A Low Dropout Voltage Regulator (Advanced Monolithic Systems)",
+    "ref": "Features and General Description, p.1",
+    "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SOT-223", "TO-252", "SO-8"],
+    "source": {
+      "doc": "AMS1117 datasheet (Advanced Monolithic Systems)",
+      "ref": "General Description and Ordering Information, p.1 — 'offered in the low profile surface mount SOT-223 package, in the 8L SOIC package and in the TO-252 (DPAK) plastic package'",
+      "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "package",
+      "combine": "first_match",
+      "on_unknown": "skip",
+      "unit": "pins",
+      "note": "GATE CAVEAT: the datasheet calls this a 'Three Terminal' regulator, and that is the electrical pin count. SOT-223 and TO-252 additionally carry a mounting tab that is electrically the same node as the output, so KiCad symbols and footprints for these packages legitimately expose FOUR pads. A pin-count gate must therefore not treat a 4-pad SOT-223 footprint as a mismatch against the asserted 3 — count electrical terminals, not pads.",
+      "branches": [
+        {"when": {"package": "SOT-223"}, "value": {"kind": "fixed", "value": 3, "unit": "pins",
+          "source": {"doc": "AMS1117 datasheet", "ref": "Features, p.1 — 'Three Terminal Adjustable or Fixed Voltages'",
+                     "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"package": "TO-252"}, "value": {"kind": "fixed", "value": 3, "unit": "pins",
+          "source": {"doc": "AMS1117 datasheet", "ref": "Features, p.1 — 'Three Terminal Adjustable or Fixed Voltages'",
+                     "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"package": "SO-8"}, "value": {"kind": "fixed", "value": 8, "unit": "pins",
+          "source": {"doc": "AMS1117 datasheet", "ref": "General Description, p.1 — '8L SOIC package'; Ordering Information AMS1117CS series, p.1",
+                     "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "AMS1117 datasheet",
+        "ref": "Features / General Description / Ordering Information, p.1",
+        "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vin_range": {
+    "status": "not_asserted",
+    "reason": "The AMS1117 datasheet publishes no recommended operating input-voltage range — it has an Absolute Maximum Ratings table (recorded in abs_max_vin) but no 'Recommended Operating Conditions' section, unlike the AP2112. The practical minimum is VOUT + dropout, both of which are asserted in the vout and dropout_v slots, so a rail-feasibility gate can compute it rather than reading an invented interval from here. Sources tried: Absolute Maximum Ratings p.2; Electrical Characteristics tables p.3; Applications Information p.4-5."
+  },
+
+  "abs_max_vin": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 15.0,
+      "unit": "V",
+      "note": "Absolute maximum, not a recommended operating point — exceeding it may cause permanent damage (datasheet Note 1). This is what makes 'feed an AMS1117 from 24 V' catchable even though no recommended range is published.",
+      "source": {
+        "doc": "AMS1117 datasheet (Advanced Monolithic Systems)",
+        "ref": "Absolute Maximum Ratings, p.2 — 'Input Voltage 15V'",
+        "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vout": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 3.3,
+      "unit": "V",
+      "note": "Fixed 3.3 V variant. The family also offers 1.5, 1.8, 2.5, 2.85 and 5.0 V fixed options plus an adjustable version, so unlike the AP2112 a 5.0 V AMS1117 does exist (AMS1117-5.0).",
+      "source": {
+        "doc": "AMS1117 datasheet (Advanced Monolithic Systems)",
+        "ref": "Features p.1 (fixed voltages 1.5/1.8/2.5/2.85/3.3/5.0 V); Electrical Characteristics AMS1117-3.3, p.3",
+        "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "dropout_v": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 1.3,
+      "unit": "V",
+      "note": "Guaranteed MAXIMUM dropout, measured at IOUT = 0.8 A with dVOUT/dVREF = 1%; typical is 1.1 V. The general description adds that dropout decreases at lower load currents, and the features list says the part 'Operates Down to 1V Dropout'. The maximum is the number a rail-feasibility check should use: a 5 V input into a 3.3 V AMS1117 leaves 1.7 V of headroom, which clears 1.3 V. A 3.3 V input would not.",
+      "source": {
+        "doc": "AMS1117 datasheet (Advanced Monolithic Systems)",
+        "ref": "Electrical Characteristics, Dropout Voltage (VIN - VOUT) row, p.3 (typ 1.1, max 1.3 V at IOUT = 0.8 A); General Description p.1",
+        "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "current_rating_ma": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 1000.0,
+      "unit": "mA",
+      "note": "Rated output current. Current limit is separately specified as min 900 / typ 1100 / max 1500 mA at (VIN - VOUT) = 1.5 V, so the 1 A rating is the design figure and 900 mA the guaranteed worst-case limit. Package power dissipation caps the usable current in practice: 1.2 W for SOT-223, 2.2 W for TO-252, 780 mW for 8-lead SOIC (p.3 Note 2).",
+      "source": {
+        "doc": "AMS1117 datasheet (Advanced Monolithic Systems)",
+        "ref": "Features p.1 ('Output Current of 1A'); Electrical Characteristics Current Limit row and Note 2, p.3",
+        "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_cin": {
+    "status": "not_asserted",
+    "reason": "The AMS1117 datasheet states no input-capacitor requirement. Its Applications Information covers only the output capacitor (frequency compensation), the adjust-pin bypass capacitor and protection diodes; the typical-application Figure 1 draws COUT and CADJ but no CIN. An input capacitor is standard practice, but it is industry convention rather than a datasheet requirement for this part, so it belongs in the soft corpus and not here. Sources tried: Applications Information / Stability / Protection Diodes p.4; Figure 1 p.4; Electrical Characteristics p.3."
+  },
+
+  "required_bypass_cap": {
+    "status": "not_applicable",
+    "reason": "The fixed AMS1117-3.3 has no accessible reference-bypass pin — its third terminal is GND. The datasheet's CADJ (10 uF, Figure 1 p.4) bypasses the ADJUST terminal of the ADJUSTABLE AMS1117 to improve ripple rejection, and that option does not exist on a fixed variant. Note the coupling recorded in required_cout: on the adjustable part, bypassing the adjust terminal is precisely what raises the output-capacitor requirement to 22 uF."
+  },
+
+  "required_cout": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 22.0,
+      "unit": "uF",
+      "note": "NOT optional and not merely a recommendation: 'The circuit design used in the AMS1117 series requires the use of an output capacitor as part of the device frequency compensation. The addition of 22 uF solid tantalum on the output will ensure stability for all operating conditions.' Dielectric matters — the datasheet specifies SOLID TANTALUM, and its ripple-rejection figures are all measured with COUT = 22 uF tantalum. Two qualifications from the same section: bypassing the adjust terminal (adjustable variant only) increases the requirement, and 22 uF covers all such cases; without adjust-pin bypassing 'smaller capacitors can be used with equally good results', though no value is given for that case. Larger values further improve stability and transient response.",
+      "source": {
+        "doc": "AMS1117 datasheet (Advanced Monolithic Systems)",
+        "ref": "Applications Information / Stability, p.4; ripple-rejection conditions in Electrical Characteristics, p.3; Figure 1 typical application, p.4",
+        "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

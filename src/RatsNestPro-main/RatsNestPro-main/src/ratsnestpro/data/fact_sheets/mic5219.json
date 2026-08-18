@@ -1,0 +1,205 @@
+{
+  "device": "MIC5219",
+  "device_class": "ldo",
+  "family": "MIC5219",
+  "aliases": ["MIC5219", "MIC5219-3.3", "MIC5219-3.3BM5", "MIC5219-3.3YM5", "MIC5219-3.3YML"],
+  "source": {
+    "doc": "MIC5219 500mA-Peak Output LDO Regulator, M0371-061809 (Micrel Inc., June 2009; now Microchip)",
+    "ref": "General Description and Features, p.1",
+    "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["SOT-23-5", "MLF-6-2x2", "ThinMLF-6-2x2", "MSOP-8"],
+    "source": {
+      "doc": "MIC5219 M0371-061809",
+      "ref": "Features, p.1 (SOT-23-5, 2mm x 2mm MLF, 2mm x 2mm Thin MLF, MSOP-8); Ordering Information, p.2",
+      "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "package",
+      "combine": "first_match",
+      "on_unknown": "skip",
+      "unit": "pins",
+      "note": "The SOT-23-5 count is certain from the package name; MSOP-8 likewise. The MLF variants carry six terminals plus an exposed pad that the pin table lists as GND ('EP ... Ground: Internally connected to the exposed pad. Connect externally to GND pin', p.3). REVIEW NOTE: the three-column pin table on p.3 was not fully disambiguated column-to-package, so the MLF count of 6 is the lower-confidence entry here.",
+      "branches": [
+        {"when": {"package": "SOT-23-5"}, "value": {"kind": "fixed", "value": 5, "unit": "pins",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Features p.1 ('Tiny SOT-23-5'); Pin Configuration/Pin Description, p.3",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"package": "MLF-6-2x2"}, "value": {"kind": "fixed", "value": 6, "unit": "pins",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Pin Description table, p.3 (highest pin number 6, plus EP tied to GND)",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"package": "MSOP-8"}, "value": {"kind": "fixed", "value": 8, "unit": "pins",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Features p.1 ('MM8 power MSOP-8 package'); Ordering Information MIC5219-x.xBMM, p.2",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Features p.1; Pin Description, p.3; Ordering Information, p.2",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vin_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "range",
+      "min": 2.5,
+      "max": 12.0,
+      "unit": "V",
+      "note": "Operating Ratings, which the datasheet distinguishes sharply from absolute maxima: 'Electrical specifications do not apply when operating the device outside of its operating ratings' (Note 1, p.5). A 12 V input is permitted here, well above the AP2112's 6.0 V ceiling.",
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Operating Ratings, p.4 — 'Supply Input Voltage (VIN) +2.5V to +12V'",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "abs_max_vin": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 20.0,
+      "unit": "V",
+      "note": "The absolute-maximum supply input range is -20 V to +20 V, i.e. symmetric — the part has reversed-battery protection as a listed feature (p.1). That is unusual and worth knowing: an accidental input polarity reversal does not necessarily destroy this regulator, whereas it would kill most CMOS LDOs.",
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Absolute Maximum Ratings, p.4 — 'Supply Input Voltage (VIN) -20V to +20V'; Features p.1 ('Reversed-battery protection')",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "vout": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 3.3,
+      "unit": "V",
+      "note": "The 3.3 V fixed option, e.g. MIC5219-3.3BM5 / -3.3YM5 in SOT-23-5 — the part used in the datasheet's own '3.3V Ultra-Low-Noise Regulator' application circuit on p.1. The family also offers other fixed voltages (the ordering table on p.2 lists 2.5 V and 2.85 V among them) plus an adjustable version with an ADJ feedback pin. Output accuracy is better than 1%.",
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Typical Applications 3.3V circuit, p.1; Ordering Information, p.2; General Description, p.1",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "dropout_v": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "load_ma",
+      "combine": "max_of_matching",
+      "on_unknown": "strictest",
+      "unit": "V",
+      "note": "Dropout is strongly load-dependent on this part — a factor of eight across the load range — so a single number would be misleading. The values below are the datasheet MAXIMUM column; typicals are 10 / 115 / 175 / 350 mV respectively. The features list summarises it as 'Low 500mV maximum dropout voltage at full load'. This very low dropout at light load (10 mV typical) is the part's selling point versus the AMS1117's 1.3 V.",
+      "branches": [
+        {"when": {"load_ma": [0, 0.1]}, "value": {"kind": "fixed", "value": 0.06, "unit": "V",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Electrical Characteristics, Dropout Voltage row at IOUT = 100 uA, p.4 (typ 10 mV, max 60 mV)",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"load_ma": [0.1, 50]}, "value": {"kind": "fixed", "value": 0.175, "unit": "V",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Electrical Characteristics, Dropout Voltage row at IOUT = 50 mA, p.4 (typ 115 mV, max 175 mV)",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"load_ma": [50, 150]}, "value": {"kind": "fixed", "value": 0.3, "unit": "V",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Electrical Characteristics, Dropout Voltage row at IOUT = 150 mA, p.4 (typ 175 mV, max 300 mV)",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"load_ma": [150, 500]}, "value": {"kind": "fixed", "value": 0.5, "unit": "V",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Electrical Characteristics, Dropout Voltage row at IOUT = 500 mA, p.4 (typ 350 mV, max 500 mV); Features p.1",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Electrical Characteristics, Dropout Voltage rows, p.4; Features, p.1",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "current_rating_ma": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 500.0,
+      "unit": "mA",
+      "note": "CRITICAL QUALIFICATION — the 500 mA figure means different things per package: 'SOT-23-5 package - 500mA PEAK; 2mm x 2mm MLF package - 500mA CONTINUOUS; 2mm x 2mm Thin MLF package - 500mA continuous; MSOP-8 package - 500mA continuous' (Features, p.1). The general description adds that in SOT-23-5 the peak rating targets start-up inrush and 'continuous output current is limited only by package and layout'. A design needing 500 mA continuously must therefore NOT use the SOT-23-5 variant. KNOWN GATE LIMITATION: because peak and continuous share the same number, a purely numeric regulator-adequacy check cannot distinguish them; separating them would need a continuous_current_ma slot. Flagged here rather than silently averaged.",
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Features, p.1 (per-package peak vs continuous); General Description, p.1",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_cin": {
+    "status": "asserted",
+    "value": {
+      "kind": "qualitative",
+      "text": "A 1 uF capacitor should be placed from IN to GND if there is more than 10 inches of wire between the input and the AC filter capacitor, or if a battery is used as the input. Deliberately stored as a qualitative fact rather than an unconditional 1 uF requirement: the datasheet makes it conditional on input wiring length and source type, neither of which a schematic netlist can determine.",
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Applications Information / Input Capacitor, p.9",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_cout": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "cbyp_pf",
+      "combine": "first_match",
+      "on_unknown": "strictest",
+      "unit": "uF",
+      "note": "'An output capacitor is REQUIRED between OUT and GND to prevent oscillation. The minimum size of the output capacitor is dependent upon whether a reference bypass capacitor is used.' That coupling is the reason required_bypass_cap exists as its own slot: fitting the 470 pF bypass capacitor raises the output-capacitor minimum from 1 uF to 2.2 uF. With the bypass state unknown, on_unknown='strictest' selects 2.2 uF. A THIRD condition applies to other family members but not to this 3.3 V part: 'For applications < 3V, the output capacitor should be increased to 22uF minimum to reduce start-up overshoot.' Larger values improve transient response.",
+      "branches": [
+        {"when": {"cbyp_pf": 470}, "value": {"kind": "fixed", "value": 2.2, "unit": "uF",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Applications Information / Output Capacitor, p.9 — '2.2uF minimum is recommended when CBYP is 470pF'; typical application circuits p.1 show 2.2 uF tantalum",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}},
+        {"when": {"cbyp_pf": 0}, "value": {"kind": "fixed", "value": 1.0, "unit": "uF",
+          "source": {"doc": "MIC5219 M0371-061809", "ref": "Applications Information / Output Capacitor, p.9 — '1uF minimum is recommended when CBYP is not used'",
+                     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf", "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Applications Information / Output Capacitor, p.9",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "required_bypass_cap": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 0.00047,
+      "unit": "uF",
+      "note": "470 pF from the BYP pin to GND reduces output noise; the pin may be left open. Optional in itself, but NOT free of consequence — fitting it doubles the minimum output capacitance (see required_cout). Both of the datasheet's own ultra-low-noise application circuits on p.1 fit 470 pF together with a 2.2 uF tantalum output capacitor. On the adjustable variant this pin is the ADJ feedback input instead.",
+      "source": {
+        "doc": "MIC5219 M0371-061809",
+        "ref": "Pin Description BYP row, p.3 — 'Reference Bypass: Connect external 470pF capacitor to GND to reduce output noise. May be left open'; Note 10 p.5; Typical Applications p.1",
+        "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/mic5219.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  }
+}

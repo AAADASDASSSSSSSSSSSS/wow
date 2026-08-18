@@ -1,0 +1,282 @@
+{
+  "device": "ESP32-C3",
+  "device_class": "mcu",
+  "family": "ESP32",
+  "aliases": [
+    "ESP32C3",
+    "ESP32-C3FN4",
+    "ESP32-C3FH4",
+    "ESP32-C3FH4AZ",
+    "ESP32-C3FH4X",
+    "ESP32-C3FH8X",
+    "ESP32-C3-MINI-1",
+    "ESP32-C3-WROOM-02"
+  ],
+  "source": {
+    "doc": "ESP32-C3 Series Datasheet v2.4 (Espressif Systems)",
+    "ref": "Table 1-1 ESP32-C3 Series Comparison, p.12",
+    "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+    "accessed": "2026-07-30"
+  },
+
+  "packages": {
+    "status": "asserted",
+    "value": ["QFN32-5x5"],
+    "source": {
+      "doc": "ESP32-C3 Series Datasheet v2.4",
+      "ref": "Cover page 'QFN32 (5x5 mm) package'; Table 1-1 p.12; Figure 7-1 QFN32 (5x5 mm) Package, p.66",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pin_count": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 32,
+      "unit": "pins",
+      "note": "QFN32 with a 33rd central GND pad shown in the pin layout (Figure 2-1, p.14). Only one package exists for this part, so no package condition is needed.",
+      "source": {
+        "doc": "ESP32-C3 Series Datasheet v2.4",
+        "ref": "Figure 2-1 Pin Layout, p.14; Figure 7-1 QFN32 package, p.66",
+        "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_range": {
+    "status": "asserted",
+    "value": {
+      "kind": "conditional",
+      "selector": "efuse_write",
+      "combine": "first_match",
+      "on_unknown": "skip",
+      "unit": "V",
+      "note": "Unlike the ESP32, the C3 datasheet has a real Recommended Operating Conditions table, so no derivation is needed. The eFuse arm is a genuine second premise, not a conflicting figure: burning eFuses caps VDD3P3_CPU at 3.3 V. on_unknown is 'skip' rather than 'strictest' because eFuse writing is a production-time activity that a schematic cannot declare, and applying the 3.3 V cap by default would wrongly reject ordinary 3.6 V designs.",
+      "branches": [
+        {"when": {"efuse_write": false},
+         "value": {"kind": "range", "min": 3.0, "max": 3.6, "unit": "V",
+           "source": {"doc": "ESP32-C3 Series Datasheet v2.4",
+                      "ref": "Table 5-2 Recommended Operating Conditions, p.54 (VDDA/VDD3P3/VDD3P3_RTC and VDD3P3_CPU: 3.0 / 3.3 / 3.6 V)",
+                      "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+                      "accessed": "2026-07-30"}}},
+        {"when": {"efuse_write": true},
+         "value": {"kind": "range", "min": 3.0, "max": 3.3, "unit": "V",
+           "source": {"doc": "ESP32-C3 Series Datasheet v2.4",
+                      "ref": "Table 5-2 note 2, p.54 — 'If writing to eFuses, the voltage on VDD3P3_CPU should not exceed 3.3 V'",
+                      "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+                      "accessed": "2026-07-30"}}}
+      ],
+      "source": {
+        "doc": "ESP32-C3 Series Datasheet v2.4",
+        "ref": "Table 5-2 Recommended Operating Conditions, p.54",
+        "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "supply_rails": {
+    "status": "asserted",
+    "value": [
+      {"name": "VDDA", "min_v": 3.0, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "note": "Analog supply (DS Table 5-2, p.54)."},
+      {"name": "VDD3P3", "min_v": 3.0, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "note": "RF/analog supply, pins 2 and 3; the filter circuit for those pins should sit close to them with GND isolation (HW guidelines §1.4.2, p.15)."},
+      {"name": "VDD3P3_RTC", "min_v": 3.0, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "note": "RTC supply (DS Table 5-2, p.54)."},
+      {"name": "VDD3P3_CPU", "min_v": 3.0, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "min_current_ma": 500,
+       "note": "Digital/CPU supply. Cumulative input current IVDD minimum 0.5 A (DS Table 5-2, p.54). Capped at 3.3 V while burning eFuses."},
+      {"name": "VDD_SPI", "min_v": 3.0, "max_v": 3.6, "typ_v": 3.3, "origin": "external",
+       "note": "Flash supply; the table lists it 'as input' at 3.0/3.3/3.6 V (DS Table 5-2, p.54)."}
+    ],
+    "source": {
+      "doc": "ESP32-C3 Series Datasheet v2.4",
+      "ref": "Table 5-2 Recommended Operating Conditions, p.54; Figure 2-1 Pin Layout, p.14",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "freq_vs_supply": {
+    "status": "not_applicable",
+    "reason": "No voltage-derated frequency table exists: the RISC-V core clocks up to 160 MHz from the PLL fed by the mandatory 40 MHz crystal, and the datasheet states no maximum-frequency-versus-supply relationship (DS Features p.3; Table 5-2 p.54 lists voltage only)."
+  },
+
+  "clock_external": {
+    "status": "asserted",
+    "value": {
+      "kind": "fixed",
+      "value": 40.0,
+      "unit": "MHz",
+      "tolerance_ppm": 10,
+      "note": "External crystal clock source is COMPULSORY; the ESP32-C3 firmware only supports a 40 MHz crystal, accuracy within +/-10 ppm. A series component is required on the XTAL_P clock trace — suggested initial value 24 nH (note this differs from the ESP32, where 0 ohm is suggested).",
+      "source": {
+        "doc": "ESP32-C3 Hardware Design Guidelines (Espressif, Release master)",
+        "ref": "§1.3.5 Clock Source, p.8 (PDF p.11)",
+        "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/esp-hardware-design-guidelines-en-master-esp32c3.pdf",
+        "accessed": "2026-07-30"
+      }
+    }
+  },
+
+  "clock_layout": {
+    "status": "asserted",
+    "value": {
+      "min_gap_to_clock_pin_mm": 2.0,
+      "vias_in_clock_trace_allowed": false,
+      "keepout_under": true,
+      "ground_guard": true,
+      "note": "Complete GND plane for RF, crystal and chip. The crystal must sit at least 2.0 mm from the clock pin (the ESP32 figure is 2.7 mm — the numbers are device-specific and must not be shared). High-density ground via stitching around the clock trace; no vias on the clock input/output traces; series components on the chip side; matching capacitors at the two sides of the crystal at the end of the clock trace."
+    },
+    "source": {
+      "doc": "ESP32-C3 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.4.3 Crystal, p.17 (PDF p.20)",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/esp-hardware-design-guidelines-en-master-esp32c3.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "decoupling": {
+    "status": "asserted",
+    "value": {
+      "per_pin": [
+        {
+          "pin_group": "chip power entrance / VDD3P3",
+          "count_per_pin": 1,
+          "cap": {
+            "kind": "fixed",
+            "value": 10.0,
+            "unit": "uF",
+            "note": "If the chip power entrance is not near VDD3P3, add a 10 uF capacitor at both the chip power entrance and VDD3P3; in the four-layer reference the 10 uF capacitor is shared by the analog supply VDD3P3 and the power entrance.",
+            "source": {
+              "doc": "ESP32-C3 Hardware Design Guidelines (Espressif, Release master)",
+              "ref": "§1.4.2 Power Supply layout, p.15 (PDF p.19)",
+              "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/esp-hardware-design-guidelines-en-master-esp32c3.pdf",
+              "accessed": "2026-07-30"
+            }
+          }
+        }
+      ],
+      "per_supply_pair_required": true,
+      "per_supply_pair_note": "Place appropriate decoupling capacitors at the rest of the power pins, with ground vias close to each capacitor's ground pad for a short return path (HW guidelines §1.4.2, p.15, PDF p.19). No capacitance is stated for those pins, so none is asserted.",
+      "bulk": {
+        "kind": "qualitative",
+        "text": "Using 0201 components for the pin-2/pin-3 filter allows the circuit to sit closer to the pins with a GND isolation layer and maximises ground via placement; a via to the bottom layer can be placed at the first capacitor near the chip.",
+        "source": {
+          "doc": "ESP32-C3 Hardware Design Guidelines (Espressif, Release master)",
+          "ref": "§1.4.2 Power Supply layout, p.15 (PDF p.19)",
+          "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/esp-hardware-design-guidelines-en-master-esp32c3.pdf",
+          "accessed": "2026-07-30"
+        }
+      },
+      "max_distance_mm": null,
+      "placement_note": "Ground pads of the chip and surrounding components must contact the ground copper pour directly rather than through traces (HW guidelines §1.4.2, p.15). No numeric distance is stated."
+    },
+    "source": {
+      "doc": "ESP32-C3 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.4.2 Power Supply layout, p.15 (PDF p.19)",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/esp-hardware-design-guidelines-en-master-esp32c3.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "reset": {
+    "status": "asserted",
+    "value": {
+      "external_required": true,
+      "details": "CHIP_EN (pin 7) is high to enable the chip and low to power it down. The datasheet states: 'Do not leave the CHIP_EN pin floating' (DS Table 2-2 pin description, p.25). As on the ESP32 the enable must come up after the supply is stable, so an external RC network on CHIP_EN is part of the reference design."
+    },
+    "source": {
+      "doc": "ESP32-C3 Series Datasheet v2.4",
+      "ref": "CHIP_EN pin 7 description, p.25; Table 2-11 Timing Parameters for Power-up and Reset, p.28",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "boot_strapping": {
+    "status": "asserted",
+    "value": [
+      {"pin": "GPIO2", "required_state": "floating by default; drive with an external resistor to change the bit",
+       "note": "Default configuration is Floating with no defined bit value; strapping pins have latches and are sampled at reset (DS Table 3-1 Default Configuration of Strapping Pins, p.30)."},
+      {"pin": "GPIO8", "required_state": "floating by default; drive with an external resistor to change the bit",
+       "note": "Default configuration Floating (DS Table 3-1, p.30)."},
+      {"pin": "GPIO9", "required_state": "weak pull-up, default bit value 1",
+       "note": "Pulling GPIO9 low at reset selects download boot (DS Table 3-1 and Table 3-3 Chip Boot Mode Control, p.30-31)."}
+    ],
+    "source": {
+      "doc": "ESP32-C3 Series Datasheet v2.4",
+      "ref": "Table 3-1 Default Configuration of Strapping Pins, p.30; Table 3-3 Chip Boot Mode Control, p.31; Features p.4 ('3 strapping GPIOs')",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "mandatory_peripherals": {
+    "status": "asserted",
+    "value": [
+      {"kind": "crystal_40mhz",
+       "note": "External crystal clock source is listed as Compulsory; only 40 MHz is supported (HW guidelines §1.3.5, p.8)."},
+      {"kind": "spi_flash",
+       "note": "'The integrated circuitry of ESP32-C3 requires only 20 electrical components (resistors, capacitors, and inductors) and a crystal, as well as an SPI flash' (HW guidelines §1.3.1 Overview, p.4, PDF p.7). In-package-flash variants (FH4/FH8) carry it internally and allocate 6 GPIOs to it (DS Features p.4)."}
+    ],
+    "source": {
+      "doc": "ESP32-C3 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.3.1 Overview, p.4 (PDF p.7); §1.3.5 Clock Source, p.8",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/esp-hardware-design-guidelines-en-master-esp32c3.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "pins": {
+    "status": "asserted",
+    "value": [
+      {"name": "VDDA", "kind": "power", "float_allowed": false,
+       "note": "Analog supply (DS Figure 2-1 p.14; Table 5-2 p.54)."},
+      {"name": "VDD3P3", "kind": "power", "float_allowed": false,
+       "note": "RF/analog supply, pins 2 and 3 (DS Figure 2-1, p.14)."},
+      {"name": "VDD3P3_RTC", "kind": "power", "float_allowed": false,
+       "note": "RTC supply (DS Figure 2-1, p.14)."},
+      {"name": "VDD3P3_CPU", "kind": "power", "float_allowed": false,
+       "note": "Digital supply; keep at or below 3.3 V while burning eFuses (DS Table 5-2 note 2, p.54)."},
+      {"name": "VDD_SPI", "kind": "power", "float_allowed": false,
+       "note": "Flash supply (DS Table 5-2, p.54)."},
+      {"name": "GND", "kind": "ground", "float_allowed": false,
+       "note": "Pin 33, the central pad (DS Figure 2-1, p.14)."},
+      {"name": "CHIP_EN", "kind": "reset", "float_allowed": false,
+       "note": "Pin 7. 'Do not leave the CHIP_EN pin floating' (DS p.25)."},
+      {"name": "XTAL_P", "kind": "clock",
+       "note": "40 MHz crystal positive, pin 30; needs a series component (24 nH suggested) on the trace (HW guidelines §1.3.5, p.8)."},
+      {"name": "XTAL_N", "kind": "clock",
+       "note": "40 MHz crystal negative, pin 29 (DS p.25)."},
+      {"name": "GPIO9", "kind": "boot", "float_allowed": true,
+       "note": "Strapping pin with an internal weak pull-up; pulling it low at reset enters download boot (DS Table 3-1, p.30)."}
+    ],
+    "source": {
+      "doc": "ESP32-C3 Series Datasheet v2.4",
+      "ref": "Figure 2-1 Pin Layout p.14; pin descriptions p.25; Table 3-1 p.30; Table 5-2 p.54",
+      "url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf",
+      "accessed": "2026-07-30"
+    }
+  },
+
+  "thermal_pad": {
+    "status": "asserted",
+    "value": {
+      "required": true,
+      "min_vias": 9,
+      "applies_to_packages": ["QFN32-5x5"],
+      "note": "'The ground pad at the bottom of the chip should be connected to the ground plane through at least nine ground vias.' Ground pads of the chip and surrounding components must contact the copper pour directly rather than through traces. For a module EPAD, use a square grid with solder paste and ground vias in the gaps, and connect the EPAD to a large external ground area with wide traces or copper planes (HW guidelines §1.4.2, p.15, PDF p.19)."
+    },
+    "source": {
+      "doc": "ESP32-C3 Hardware Design Guidelines (Espressif, Release master)",
+      "ref": "§1.4.2 Power Supply layout, p.15 (PDF p.19)",
+      "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/esp-hardware-design-guidelines-en-master-esp32c3.pdf",
+      "accessed": "2026-07-30"
+    }
+  }
+}
