@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "suiteId": "ratsnest-harness-holdout-v1",
+  "suiteDigest": "f9a36fc98ad39b3f201b5a45e8383bdc137c76197a61505bd738e87689e5674b",
+  "cases": [
+    {
+      "ref": "evals/sealed/manifests/constraint-preservation.v1.json",
+      "sha256": "420131c9d8275e43fb34d6b688a771d99018b6da83dfb70095bf7aef0fb34391",
+      "sealed": true
+    },
+    {
+      "ref": "evals/sealed/manifests/systemic-grounding-and-evolution.v1.json",
+      "sha256": "f82d3b7c2a1c64b9fde063f2e3aaeabac21a6599ed867921ec219b7a97625b36",
+      "sealed": true
+    }
+  ]
+}

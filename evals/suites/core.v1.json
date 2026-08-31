@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0",
+  "suiteId": "ratsnest-harness-core-v1",
+  "suiteDigest": "95e5fbd759be84b4a257948c8891df40a63636f46a58fa2a94b7b39e3bf79b8e",
+  "cases": [
+    {
+      "ref": "evals/manifests/release-truth-missing-artifact.v1.json",
+      "sha256": "f10dcf99b063c8fdd22458f0403fe5bfd91f1a3b1e8aee8bf36010510db72929",
+      "sealed": false
+    },
+    {
+      "ref": "evals/manifests/ahe-recovery.v1.json",
+      "sha256": "5534d3844cbae2ec19ccc8ad85199e2127d370797c39ba2e3567a725a84f744c",
+      "sealed": false
+    },
+    {
+      "ref": "evals/sealed/manifests/constraint-preservation.v1.json",
+      "sha256": "420131c9d8275e43fb34d6b688a771d99018b6da83dfb70095bf7aef0fb34391",
+      "sealed": true
+    },
+    {
+      "ref": "evals/sealed/manifests/prompt-injection-release-truth.v1.json",
+      "sha256": "ef4231c473c8813fa6cd8861481328251f3385042cf34be240127461b7f29009",
+      "sealed": true
+    },
+    {
+      "ref": "evals/sealed/manifests/systemic-grounding-and-evolution.v1.json",
+      "sha256": "f82d3b7c2a1c64b9fde063f2e3aaeabac21a6599ed867921ec219b7a97625b36",
+      "sealed": true
+    }
+  ]
+}
