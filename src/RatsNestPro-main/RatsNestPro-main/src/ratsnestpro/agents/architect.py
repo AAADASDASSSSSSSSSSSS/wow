@@ -1,6 +1,8 @@
-"""The Architect: requirement normalization, family judgment, and parameter
-selection. The LLM only judges and proposes; the params it returns are
-re-validated by the Atmega328Params contract before anything downstream runs.
+"""Legacy pipeline-A Architect for the deterministic ATmega328 template.
+
+The adaptive pipeline-B Architect is capability-driven and does not use this
+family gate. Here the LLM only judges and proposes template parameters; the
+params it returns are re-validated by the Atmega328Params contract.
 """
 
 from __future__ import annotations
@@ -19,7 +21,8 @@ from ratsnestpro.families import FAMILY_ID, Atmega328Params
 _SYSTEM = (
     "You are the Architect gatekeeper for RatsNestPro. Only the "
     f"'{FAMILY_ID}' family is supported: an ATmega328P USB-C development board "
-    "with an LDO, crystal, decoupling capacitors, reset, optional power LED, "
+    "with a protected/regulating power stage, crystal, decoupling capacitors, "
+    "reset, optional power LED, "
     "breakout headers and mounting holes. Decide whether the request belongs "
     "to this family, whether all mandatory features are preserved, and choose "
     "in-family parameters. Respond with STRICT JSON only, no prose, matching:\n"

@@ -85,7 +85,11 @@ def audit_power_rails(sch) -> List[Dict[str, Any]]:
     return findings
 
 
-def audit_manufacturing(board, min_spacing: float = 0.5) -> List[Dict[str, Any]]:
+def audit_manufacturing(
+    board,
+    min_spacing: float = 0.5,
+    expected_nets: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
     findings = []
     fps = [f for f in board.list_footprints() if f.get("at")]
     if board.get_board_extents() is None:
@@ -97,6 +101,40 @@ def audit_manufacturing(board, min_spacing: float = 0.5) -> List[Dict[str, Any]]
                 findings.append({"severity": "warning",
                                  "issue": "components very close (%.2fmm)" % d,
                                  "refs": [fps[i]["reference"], fps[j]["reference"]]})
+    board_nets = {
+        str(item.get("name", "")).lstrip("/")
+        for item in board.list_nets()
+        if str(item.get("name", "")).strip()
+    }
+    pad_nets = {name.lstrip("/") for name in board.pad_net_names()}
+    expected = {
+        str(name).lstrip("/") for name in (expected_nets or []) if str(name).strip()
+    }
+    if fps and not board_nets:
+        findings.append({"severity": "error", "issue": "PCB contains no named electrical nets"})
+    if board_nets and not pad_nets:
+        findings.append({"severity": "error", "issue": "no footprint pads are assigned to nets"})
+    missing_board_nets = sorted(expected - board_nets)
+    if missing_board_nets:
+        findings.append({
+            "severity": "error",
+            "issue": f"PCB is missing schematic nets: {missing_board_nets[:20]}",
+        })
+    missing_pad_nets = sorted(expected - pad_nets)
+    if missing_pad_nets:
+        findings.append({
+            "severity": "error",
+            "issue": f"schematic nets are not assigned to PCB pads: {missing_pad_nets[:20]}",
+        })
+    power_names = {
+        "gnd", "ground", "vss", "vcc", "vdd", "3v3", "+3v3", "5v", "+5v", "vbus"
+    }
+    signal_nets = {name for name in (expected or board_nets) if name.casefold() not in power_names}
+    if signal_nets and not board.list_tracks():
+        findings.append({
+            "severity": "error",
+            "issue": "PCB has signal nets but no copper track segments",
+        })
     return findings
 
 

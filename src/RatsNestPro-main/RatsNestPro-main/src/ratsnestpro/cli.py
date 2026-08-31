@@ -3,8 +3,9 @@
     ratsnestpro design-plan "<requirement>" --out runs/demo [--llm auto]
     ratsnestpro design      "<requirement>" --out runs/demo [--llm required] [--no-erc]
 
-The Architect normalizes the requirement, judges the family, and selects
-in-family parameters. In ``--llm offline`` (default) this is deterministic; in
+These legacy ``design-plan`` / ``design`` commands target the deterministic
+ATmega328 template. Their Architect normalizes the requirement and selects
+in-template parameters. In ``--llm offline`` (default) this is deterministic; in
 ``auto``/``required`` it uses EricAI (falling back / failing closed per mode).
 Explicit --crystal/--ldo/... flags always override the Architect's choice.
 """
@@ -189,7 +190,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"LLM required but unavailable: {exc}", file=sys.stderr)
             return 2
         state = PipelineState(requirement_text=args.requirement, project_name=args.project)
-        ctx = PipelineContext(mode=mode, client=client, out_dir=args.out, repair_attempts=2)
+        ctx = PipelineContext(
+            mode=mode,
+            client=client,
+            out_dir=args.out,
+            repair_attempts=2,
+            # A build command must never turn an unrouted placement into
+            # manufacturing files merely because the router is unavailable.
+            require_freerouting=True,
+        )
         try:
             Pipeline().run(state, ctx)
         except LlmError as exc:

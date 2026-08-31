@@ -21,6 +21,7 @@ from ratsnestpro.families import Atmega328Params, expectations_for
 from ratsnestpro.orchestration import generate_design, review_project, run_repair
 from ratsnestpro.orchestration.generate import build_design_plan
 from ratsnestpro.orchestration.pipeline import (
+    PIPELINE_TOTAL_STEPS,
     Pipeline,
     PipelineContext,
     PipelineState,
@@ -28,9 +29,13 @@ from ratsnestpro.orchestration.pipeline import (
     _mcu_models,
     restore_pipeline_state,
 )
-from ratsnestpro.orchestration.pipeline_contracts import RouteResult, SelectionPlan
+from ratsnestpro.orchestration.pipeline_contracts import (
+    ComponentPrepareResult,
+    RouteResult,
+    SelectionPlan,
+)
 from ratsnestpro.orchestration.review_project import ReviewProjectError
-from ratsnestpro.parts import PartSelector
+from ratsnestpro.parts import PartConstraint, PartSelector, ProcurementContext
 
 from agents.ratsnestpro.capability import (
     normalize_order_code,
@@ -72,6 +77,11 @@ def _pipeline_steps(state: PipelineState) -> list[dict[str, Any]]:
                 }
                 for check in result.error_checks
             ],
+            "warnings": [
+                {"name": check.name, "message": check.message}
+                for check in result.checks
+                if not check.ok and check.severity.value == "warning"
+            ],
         }
         for result in state.results
     ]
@@ -110,7 +120,7 @@ def _announce_pipeline_step(state: PipelineState, step: PipelineStep) -> None:
             "phase": f"pipeline:{getattr(step, 'value', step)}",
             "status": "started",
             "completed_steps": len(state.results),
-            "total_steps": 17,
+            "total_steps": PIPELINE_TOTAL_STEPS,
         }
     )
 
@@ -135,7 +145,7 @@ def _checkpoint_pipeline_step(
             "status": "blocked" if result.blocked else "completed",
             "detail": result.summary,
             "completed_steps": len(state.results),
-            "total_steps": 17,
+            "total_steps": PIPELINE_TOTAL_STEPS,
         }
     )
 
@@ -296,7 +306,7 @@ def _pipeline_mode(requirement: str, requested: LlmMode) -> LlmMode:
 def _pipeline_client(mode: LlmMode) -> object | None:
     """Pick the chat client for a pipeline run.
 
-    A full 17-step run outlives a single short-lived credential. RatsNestPro's
+    A full pipeline run outlives a single short-lived credential. RatsNestPro's
     own EricAI client renews its SSO token per call, whereas the toolkit's
     LangChain model is constructed with a fixed API key, so a long run against
     the EricAI gateway fails midway with ``Unauthorized``. Prefer the native
@@ -640,7 +650,7 @@ def ratsnest_create_design_plan(
                     "status": "use_generic_pipeline",
                     "reason": (
                         "This tool is the ATmega328 offline template only; the requested "
-                        "family must use the adaptive 17-step pipeline."
+                        "family must use the adaptive pipeline."
                     ),
                     "next_tool": "ratsnest_run_pcb_pipeline",
                     "required_llm_mode": "required",
@@ -712,7 +722,7 @@ def ratsnest_generate_schematic(
                     "status": "use_generic_pipeline",
                     "reason": (
                         "This tool is the ATmega328 schematic template only; the requested "
-                        "family must use the adaptive 17-step pipeline."
+                        "family must use the adaptive pipeline."
                     ),
                     "next_tool": "ratsnest_run_pcb_pipeline",
                     "required_llm_mode": "required",
@@ -794,7 +804,7 @@ def _run_pcb_pipeline_unlocked(
     resume_from: str = "",
     drop_refs: list[str] | None = None,
 ) -> str:
-    """Run RatsNestPro pipeline B, the fixed 17-step schematic-to-manufacture flow.
+    """Run RatsNestPro pipeline B, the fixed schematic-to-manufacture flow.
 
     The flow stops at the first blocking bottom-line check. It can generate a
     schematic, PCB, BOM, CPL and Gerbers. In the Docker deployment,
@@ -819,7 +829,10 @@ def _run_pcb_pipeline_unlocked(
             )
         )
         resumed_steps = len(state.results)
-        require_freerouting = _env_flag("RATSNESTPRO_REQUIRE_FREEROUTING")
+        require_freerouting = _env_flag(
+            "RATSNESTPRO_REQUIRE_FREEROUTING",
+            default=True,
+        )
         Pipeline().run(
             state,
             PipelineContext(
@@ -840,6 +853,7 @@ def _run_pcb_pipeline_unlocked(
         )
         route_artifact = state.artifact(PipelineStep.ROUTE_SIGNALS)
         selection_artifact = state.artifact(PipelineStep.SELECTION)
+        preparation_artifact = state.artifact(PipelineStep.COMPONENT_PREPARE)
         routing = (
             route_artifact.model_dump()
             if isinstance(route_artifact, RouteResult)
@@ -872,6 +886,16 @@ def _run_pcb_pipeline_unlocked(
             pcb_paths[0] if pcb_paths else None,
         )
         verification_blockers = _verification_blockers(verification)
+        component_release_ready = (
+            preparation_artifact.release_ready
+            if isinstance(preparation_artifact, ComponentPrepareResult)
+            else False
+        )
+        component_release_blockers = (
+            list(preparation_artifact.release_blockers)
+            if isinstance(preparation_artifact, ComponentPrepareResult)
+            else ["component preparation report is unavailable"]
+        )
         steps = _pipeline_steps(state)
         if not state_path.is_file():
             _write_pipeline_state(state_path, requirement, state)
@@ -881,7 +905,7 @@ def _run_pcb_pipeline_unlocked(
             "workspace": str(_workspace_root()),
             "run_directory": str(out),
             "completed_steps": len(state.results),
-            "total_steps": 17,
+            "total_steps": PIPELINE_TOTAL_STEPS,
             "resumed_steps": resumed_steps,
             "requested_llm_mode": requested_mode.value,
             "effective_llm_mode": mode.value,
@@ -890,6 +914,8 @@ def _run_pcb_pipeline_unlocked(
             "routing": routing,
             "verification": verification,
             "verification_blockers": verification_blockers,
+            "component_release_ready": component_release_ready,
+            "component_release_blockers": component_release_blockers,
             "steps": steps,
             "pipeline_state_path": str(state_path),
             "pipeline_result_path": str(result_path),
@@ -909,7 +935,7 @@ def ratsnest_run_pcb_pipeline(
     resume_from: str = "",
     drop_refs: list[str] | None = None,
 ) -> str:
-    """Run one checkpointed 17-step PCB pipeline without run-directory races."""
+    """Run one checkpointed PCB pipeline without run-directory races."""
     out = _run_dir(run_name)
     try:
         with _serialize_pipeline_run(out):
@@ -1004,34 +1030,53 @@ def ratsnest_review_kicad_project(
         return _json({"status": "error", "error": str(exc)})
 
 
-def ratsnest_search_parts(query: str, limit: int = 10) -> str:
-    """Search the grounded local JLCPCB SQLite cache without inventing parts."""
+def ratsnest_search_parts(query: str, limit: int = 10, package: str = "") -> str:
+    """Search configured catalogues without inventing parts or stock data."""
     selector = PartSelector()
-    if not selector.available():
+    candidates, issues = selector.search_catalog(
+        PartConstraint(role="free_text", value=query, package=package),
+        ProcurementContext(),
+        limit=max(1, min(limit, 50)),
+    )
+    if not candidates and issues and all(not provider.available() for provider in selector.providers):
         return _json(
             {
                 "status": "unavailable",
-                "error": "No local JLCPCB cache is available.",
+                "error": "No configured parts catalogue is available.",
                 "cache_hint": "Mount jlcpcb.sqlite under KICAD_MCP_HOME.",
+                "provider_issues": [issue.__dict__ for issue in issues],
             }
         )
-    hits = selector.search(query, limit=max(1, min(limit, 50)))
     return _json(
         {
-            "status": "ok",
+            "status": "ok" if candidates else "partial",
             "query": query,
             "results": [
                 {
                     "lcsc": item.lcsc,
                     "mpn": item.mpn,
+                    "manufacturer": item.manufacturer,
                     "description": item.description,
                     "package": item.package,
+                    "provider": item.provider,
+                    "provider_part_id": item.provider_part_id,
                     "basic": item.basic,
                     "stock": item.stock,
                     "price": item.price,
+                    "currency": item.currency,
+                    "lead_days": item.lead_days,
+                    "package_match": item.package_match,
+                    "asset_status": item.asset_status,
+                    "datasheet": item.datasheet,
+                    "source_url": item.source_url,
+                    "snapshot_id": item.snapshot_id,
+                    "lifecycle": item.lifecycle,
+                    "rohs": item.rohs,
+                    "constraint_gaps": list(item.constraint_gaps),
                 }
-                for item in hits
+                for item in candidates
             ],
+            "provider_issues": [issue.__dict__ for issue in issues],
         }
     )
 

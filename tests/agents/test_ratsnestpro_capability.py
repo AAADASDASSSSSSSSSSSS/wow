@@ -78,6 +78,25 @@ def test_same54_order_code_resolves_without_a_brand_whitelist() -> None:
     assert "user_constraint" in resolved.sources
 
 
+def test_unpinned_mcu_families_remain_selection_candidates() -> None:
+    requirement = (
+        "STM32F405RGT6 or ESP32-C3 are both acceptable; choose from Wi-Fi, BLE, "
+        "low-power and cost requirements."
+    )
+
+    assert resolve_primary_mcu(requirement) is None
+    assert ConstraintSet.from_requirement(requirement).mcu is None
+    assert _component_queries(requirement) == []
+
+
+def test_direct_use_of_one_mcu_is_an_exact_constraint() -> None:
+    resolved = resolve_primary_mcu("Use RP2040 for the development board.")
+
+    assert resolved is not None
+    assert resolved.token == "RP2040"
+    assert resolved.substitution == "forbidden"
+
+
 def test_agent_primary_mcu_helper_resolves_previously_missed_family() -> None:
     # The old _MCU_RE whitelist returned "" for every ATSAME/SAME order code.
     assert _primary_mcu_mention(SAME54_MCU_CLAUSE) == "ATSAME54P20A-AU"
@@ -526,6 +545,39 @@ async def test_initialize_stores_constraints_and_capabilities_once() -> None:
     assert mcu is not None
     assert mcu.manufacturer_part_number == "ATSAME54P20A-AU"
     assert mcu.substitution == "forbidden"
+
+
+@pytest.mark.asyncio
+async def test_initialize_marks_requirement_driven_mcu_selection() -> None:
+    state = await initialize(
+        {
+            "messages": [HumanMessage(content=(
+                "Design a new battery-powered controller with Wi-Fi, BLE, two UARTs, "
+                "twelve GPIOs and OTA. Select the MCU from these capabilities."
+            ))]
+        },
+        {"configurable": {"thread_id": "capability-selection"}},
+    )
+
+    assert state["capability"]["selection_mode"] == "capability_only"
+    assert state["capability"]["primary_mcu"] == ""
+    assert ConstraintSet.from_state(state["component_constraints"]).mcu is None
+
+
+@pytest.mark.asyncio
+async def test_initialize_keeps_broad_family_for_later_selection() -> None:
+    requirement = "主控使用 STM32，至少两个 UART；具体型号由选型阶段决定。"
+
+    state = await initialize(
+        {"messages": [HumanMessage(content=requirement)]},
+        {"configurable": {"thread_id": "family-selection"}},
+    )
+
+    assert resolve_primary_mcu(requirement) is None
+    assert ConstraintSet.from_state(state["component_constraints"]).mcu is None
+    assert state["capability"]["selection_mode"] == "capability_only"
+    assert "mcu_family_any_of=STM32" in state["capability"]["required_capabilities"]
+    assert _component_queries(requirement, state["component_constraints"]) == []
 
 
 def test_recoverable_failure_routes_to_in_task_repair() -> None:

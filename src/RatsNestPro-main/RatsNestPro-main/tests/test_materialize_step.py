@@ -99,12 +99,13 @@ def test_materialize_writes_sch_and_round_trips(tmp_path) -> None:
 
 
 def test_labels_sit_on_real_pin_geometry(tmp_path) -> None:
-    # R1 at (50,50); pin 1 local (0, 3.81) Y-up -> schematic (50, 50-3.81=46.19).
+    # Origins snap to KiCad's 50 mil grid: 50 mm -> 49.53 mm. R1 pin 1 local
+    # (0, 3.81) Y-up therefore lands at schematic (49.53, 45.72).
     state = _state()
     SchMaterializeStep().run(state, PipelineContext(mode=LlmMode.OFFLINE, out_dir=str(tmp_path)))
     doc = SchematicDoc.load(state.artifact(PipelineStep.SCH_MATERIALIZE).sch_path)
     coords = {(round(x, 2), round(y, 2)) for x, y in doc.label_netlist()["N1"]}
-    assert (50.0, 46.19) in coords  # R1 pin 1 at real transformed geometry
+    assert (49.53, 45.72) in coords  # R1 pin 1 at real transformed geometry
 
 
 def test_materialize_pinmapped_helper_direct() -> None:

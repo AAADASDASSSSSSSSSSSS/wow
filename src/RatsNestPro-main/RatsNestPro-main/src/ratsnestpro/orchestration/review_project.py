@@ -26,6 +26,11 @@ from ratsnestpro.domain.contracts import (
 from ratsnestpro.eda.vendor import review as vreview
 from ratsnestpro.eda.vendor.pcb import PcbBoard
 from ratsnestpro.eda.vendor.schematic import Schematic
+from ratsnestpro.orchestration.pipeline_contracts import (
+    COMPONENT_RELEASE_MANIFEST_SCHEMA,
+    COMPONENT_RELEASE_POLICY,
+    RELEASE_PROVEN_STATUSES,
+)
 
 
 class ReviewProjectError(RuntimeError):
@@ -93,15 +98,19 @@ def _to_findings(rule_prefix: str, audit: list[dict]) -> list[Finding]:
     return out
 
 
-def _gate(name: str, findings: list[Finding]) -> GateResult:
+def _gate(
+    name: str,
+    findings: list[Finding],
+    *,
+    required: bool = False,
+) -> GateResult:
     status = (
         GateStatus.FAILED
         if any(f.severity == Severity.ERROR for f in findings)
         else GateStatus.PASSED
     )
-    # Audits are advisory reviews (not release gates), so they are not required.
     return GateResult(
-        gate=name, status=status, required=False,
+        gate=name, status=status, required=required,
         summary=f"{len(findings)} finding(s)", findings=findings,
     )
 
@@ -145,15 +154,6 @@ def _evidence_strings(value: object) -> list[str]:
     return [text] if text else []
 
 
-_RELEASE_PROVEN_STATUSES = {
-    "installed_exact",
-    "installed_qualified_validated",
-    "replaceable_grounded",
-}
-_COMPONENT_RELEASE_MANIFEST_SCHEMA = 2
-_COMPONENT_RELEASE_POLICY = "explicit_component_closure_v1"
-
-
 def _release_proof_problem(
     *,
     release_ready: bool,
@@ -170,7 +170,7 @@ def _release_proof_problem(
         return "release_ready is not explicitly true"
     if not status:
         return "component closure status is missing"
-    if status not in _RELEASE_PROVEN_STATUSES:
+    if status not in RELEASE_PROVEN_STATUSES:
         return f"resolution status {status!r} is not release-proven"
     return ""
 
@@ -212,6 +212,10 @@ def _component_release_gate(
     manifest_path = _sidecar(
         project_path,
         schematic_path,
+        "_component_release.json",
+    ) or _sidecar(
+        project_path,
+        schematic_path,
         "_unresolved_components.json",
     )
     if manifest_path is not None:
@@ -220,7 +224,7 @@ def _component_release_gate(
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             if (
                 payload.get("schema_version")
-                != _COMPONENT_RELEASE_MANIFEST_SCHEMA
+                != COMPONENT_RELEASE_MANIFEST_SCHEMA
             ):
                 manifest_findings.append(
                     _release_finding(
@@ -233,7 +237,7 @@ def _component_release_gate(
                         source=manifest_path,
                     )
                 )
-            if payload.get("release_policy") != _COMPONENT_RELEASE_POLICY:
+            if payload.get("release_policy") != COMPONENT_RELEASE_POLICY:
                 manifest_findings.append(
                     _release_finding(
                         rule_id="RELEASE-MANIFEST-POLICY",
@@ -463,11 +467,16 @@ def _component_release_gate(
                     release_ready = str(
                         row.get("ReleaseReady", "")
                     ).casefold()
+                    unresolved = str(row.get("Unresolved", "")).casefold() in {
+                        "1",
+                        "true",
+                        "yes",
+                    }
                     problem = _release_proof_problem(
                         release_ready=release_ready == "yes",
                         status=resolution,
                         dnp=dnp,
-                        unresolved=False,
+                        unresolved=unresolved,
                         symbol="",
                     )
                     if not problem:
@@ -519,11 +528,11 @@ def _component_release_gate(
         )
     if findings:
         status = GateStatus.FAILED
-        required = True
+        required = False
         summary = f"{len(findings)} nonrelease component finding(s)"
     else:
         status = GateStatus.PASSED
-        required = True
+        required = False
         summary = "all physical components have explicit release proof"
     return GateResult(
         gate="component_release",
@@ -577,8 +586,19 @@ def review_project(
 
     if pcb_path is not None:
         if board is not None:
-            mfg = _to_findings("MFG", _safe(vreview.audit_manufacturing, board))
-            gates.append(_gate("manufacturing", mfg))
+            expected_nets = sch.list_nets() if sch is not None else []
+            mfg = _to_findings(
+                "MFG",
+                _safe(
+                    vreview.audit_manufacturing,
+                    board,
+                    expected_nets=expected_nets,
+                ),
+            )
+            # Board connectivity/copper is a technical completion gate. Part
+            # procurement proof is reported separately and remains advisory
+            # until the user chooses to prepare a purchasing release.
+            gates.append(_gate("manufacturing", mfg, required=True))
         else:  # pragma: no cover - malformed/empty pcb
             gates.append(
                 GateResult(
@@ -594,9 +614,9 @@ def review_project(
     )
 
 
-def _safe(fn, *args) -> list[dict]:
+def _safe(fn, *args, **kwargs) -> list[dict]:
     try:
-        return list(fn(*args) or [])
+        return list(fn(*args, **kwargs) or [])
     except Exception:  # pragma: no cover - defensive against odd inputs
         return []
 

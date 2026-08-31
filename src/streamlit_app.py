@@ -128,12 +128,13 @@ def render_decision_form(decisions: list[dict]) -> str | None:
 # The board pipeline emits one workflow event per step under this phase prefix
 # (see agents/ratsnestpro/tools.py _checkpoint_pipeline_step).
 PIPELINE_PHASE_PREFIX = "pipeline:"
-PIPELINE_TOTAL_STEPS = 17
+PIPELINE_TOTAL_STEPS = 18
 
 _PIPELINE_STEP_LABELS = {
     "requirements": "需求解析",
     "topology": "拓扑",
     "selection": "选型",
+    "component_prepare": "器件准备",
     "schematic_connections": "原理图连接",
     "schematic_pinmap": "引脚映射",
     "schematic_layout": "原理图布局",
@@ -152,9 +153,9 @@ _PIPELINE_STEP_LABELS = {
 
 
 class PipelineProgress:
-    """One progress bar for the 17 board-building steps.
+    """One progress bar for the 18 board-building steps.
 
-    Rendering each step as its own ``st.status`` produced seventeen collapsed
+    Rendering each step as its own ``st.status`` produced too many collapsed
     boxes and no sense of how far along a run was, which is what made a working
     pipeline look hung. A blocked step does not stop the bar: the pipeline keeps
     going when ``RATSNESTPRO_CONTINUE_ON_BLOCKED`` is set, so the bar tracks
@@ -671,7 +672,7 @@ async def draw_messages(
                         # reruns when a turn ends to clear stale containers, and
                         # that redraw replays st.session_state.messages: an event
                         # that was never stored there vanished with the container,
-                        # leaving a finished 17-step build with no record that it
+                        # leaving a finished 18-step build with no record that it
                         # had ever reported progress.
                         if is_new:
                             st.session_state.messages.append(msg)

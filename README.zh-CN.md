@@ -73,8 +73,8 @@ RatsNestPro 构建于开源框架 [agent-service-toolkit](https://github.com/Jos
 
 这条原则派生出三个定义了整个项目的结果:
 
-1. **Fail-closed 门禁。** 一条 17 步、知识驱动的管线,每一步都有失败即阻断的检查。被降级的检查仍会连同它所覆盖的引用一起报出来,绝不悄悄删掉。
-2. **有据可查,而非凭空捏造。** 器件来自本地 JLCPCB 目录(不编造 MPN/LCSC 编号)。符号与封装对照已安装的 KiCad 库解析。布线必须真正完成:KiCad DSN → Freerouting → SES,**零未连接项**是一道阻断性生产门禁。
+1. **Fail-closed 门禁。** 一条 18 步、知识驱动的管线,每一步都有失败即阻断的检查。被降级的检查仍会连同它所覆盖的引用一起报出来,绝不悄悄删掉。
+2. **有据可查,而非凭空捏造。** 器件来自本地 JLCPCB 目录或明确配置的采购 API(不编造 MPN/LCSC、库存和价格)。符号与封装对照已安装的 KiCad 库解析。布线必须真正完成:KiCad DSN → Freerouting → SES,**零未连接项**是一道阻断性生产门禁。
 3. **诚实的交付状态。** 一次 run 只会落到三种状态之一:`execution_blocked`、`delivered_with_issues`、`release_ready`。是否可交付由证据推导,绝不从叙述文字里猜。
 
 ---
@@ -85,7 +85,7 @@ RatsNestPro 构建于开源框架 [agent-service-toolkit](https://github.com/Jos
 不是一堆名字里带 "agent" 的类。一个 LangGraph **supervisor** 把任务委派给四个各有独立 prompt、契约、权限和受限工具权限的专家。交接用带类型的 Pydantic 模型,而不是自由散文。举例:Hardware Engineer 只能执行经过校验的 `set_param` 操作 —— 不能写任意文件,也不能执行 shell。
 
 ### 🔒 确定性 fail-closed 验证
-权威核心是确定性的。17 步管线跑真实的 ERC/DRC 和连通性检查;门禁一旦失败就阻断,并给出可执行的整改指令。独立的 Reviewer **无权改动门禁严重度** —— 它只审查、只叙述,不推翻。
+权威核心是确定性的。18 步管线跑真实的 ERC/DRC 和连通性检查;门禁一旦失败就阻断,并给出可执行的整改指令。独立的 Reviewer **无权改动门禁严重度** —— 它只审查、只叙述,不推翻。
 
 ### 🧠 build 前的风险仲裁(ACK-RISK)
 任何设计动作开始前,`build` 请求都会先对照器件的 **fact sheet** 仲裁。如果某个请求值突破了被引用的 datasheet 限值,图会停下来,明确说出这个值、限值、它出自哪一页,以及能接受它的那个 `ACK-RISK:` token。确定性代码会丢弃任何并非真正提供过的 token —— 所以一个幻觉的或过于慷慨的回答,**无法豁免一条用户根本没见过的限值。**
@@ -171,10 +171,10 @@ flowchart LR
 
 | 智能体 | 职责 | 权限边界 |
 | --- | --- | --- |
-| 🏛 **Architect** | 需求研究(web search)、器件族判断、参数选型,产出**不可变的 `DesignPlan`** | 仅做建议性研究;不能改动门禁裁决 |
-| 🔧 **Hardware Engineer** | 跑完整 17 步管线:生成、验证、修复 | 只能做校验过的 `set_param` 操作 —— 不写任意文件、不执行 shell |
+| 🏛 **Architect** | 将能力、接口、供电与物理约束冻结成**不可变的 `DesignPlan`**；仅在用户明确固定器件时保留精确料号 | 仅做建议性研究；不能改动门禁裁决，也不能为能力型需求提前指定器件族 |
+| 🔧 **Hardware Engineer** | 跑完整 18 步管线:生成、验证、修复 | 只能做校验过的 `set_param` 操作 —— 不写任意文件、不执行 shell |
 | 🔍 **Reviewer** | 独立审查任意 KiCad 工程;保严重度的叙述 | **不能改动**权威门禁严重度 |
-| 📦 **Parts Specialist** | 在本地 JLCPCB SQLite 缓存里做有据检索 | 不能捏造 MPN / LCSC 数据 |
+| 📦 **Parts Specialist** | 以 JLCPCB 优先，并可接入 DigiKey/Mouser 的有据目录检索 | 不能捏造 MPN / LCSC、库存或价格数据 |
 
 supervisor 可以只选一个角色,也可以做顺序交接(例如*先生成、再审查* → Hardware Engineer → Reviewer)。每一次转交都会流式推给 UI,委派过程实时可见。
 
@@ -190,7 +190,7 @@ flowchart TD
     INIT --> RISK{"Value breaks a<br/>cited datasheet limit?"}
     RISK -->|"yes · not acknowledged"| CLAR["clarify_risk<br/>state value · limit · page · ACK-RISK token"] --> STOP(["⏸ End turn — nothing built"])
     RISK -->|"no / acknowledged"| PLAN["🏛 Architect<br/>immutable DesignPlan"]
-    PLAN --> PIPE["🔧 17-step pipeline<br/>select · schematic · layout ..."]
+    PLAN --> PIPE["🔧 18-step pipeline<br/>select · prepare · schematic · layout ..."]
     PIPE --> GATE{"Deterministic<br/>fail-closed gates"}
     GATE -->|"fail · recoverable"| REPAIR["♻️ AHE self-repair<br/>bounded budget"] --> PIPE
     GATE -->|"pass"| ROUTE["🏭 KiCad DSN → Freerouting → SES<br/>zero unconnected items"]
@@ -198,7 +198,7 @@ flowchart TD
     REV --> ART["📦 Immutable artifact manifest<br/>delivery status"]
 ```
 
-**17 步知识驱动管线**覆盖器件族选择、有据器件选型、原理图连接、ERC、布局摆放、平面/层规划、布线、DRC 和出报告 —— 每一步都由读取真实工具输出的检查把关。下面这些是这些确定性检查抓得住、而纯 LLM 流程会漏掉的缺陷示例:
+**18 步知识驱动管线**覆盖需求驱动拓扑、能力型且有据的器件选型、器件准备、原理图连接、ERC、布局摆放、平面/层规划、布线、DRC 和出报告。STM32、ESP32、RP2040、AVR 不是需求入口分类；用户只写宽泛家族时，它只会缩小候选范围，具体型号仍由选型阶段决定。用户明确固定的精确 MPN 仍是硬约束。每一步都由读取真实工具输出的检查把关。下面这些是这些确定性检查抓得住、而纯 LLM 流程会漏掉的缺陷示例:
 
 - 一个安装孔被"选"成了 6 脚有源振荡器,然后标注成 `mechanical`;
 - 需求要 HSE 通道,晶振却被接到了 32.768 kHz 的 LSE 通道 —— 靠读符号的 alternate 引脚名抓出来,而不是看那个具有误导性的网络名;
@@ -297,6 +297,12 @@ RATSNESTPRO_AHE_ENABLED=true           # 有预算约束的任务内自修复
 RATSNESTPRO_TEMPORAL_ENABLED=true      # 持久化的 Hardware Engineer 执行
 ```
 
+器件选型默认优先使用 JLCPCB/LCSC。只有在已配置账号时才启用 DigiKey 或
+Mouser 适配器：DigiKey 需要 `DIGIKEY_CLIENT_ID`，再配置
+`DIGIKEY_CLIENT_SECRET`（自动使用双腿 OAuth）或短期 `DIGIKEY_ACCESS_TOKEN`，
+Mouser 需要 `MOUSER_API_KEY`。供应商响应会保存为带时间的本地快照；缺少凭据只记为发布证据缺口，
+不会阻止原理图或布局继续生成。
+
 ---
 
 ## 💡 使用示例
@@ -307,8 +313,8 @@ RATSNESTPRO_TEMPORAL_ENABLED=true      # 持久化的 Hardware Engineer 执行
 # 生成不可变设计计划
 为 ATmega328 USB-C 5V 16MHz 开发板生成不可变设计计划,run_name 用 demo-plan。
 
-# 跑完整 17 步 PCB 流程
-运行完整 17 步 PCB 流程:ATmega328 USB-C 3.3V 8MHz,run_name 用 demo-pcb。
+# 跑完整 18 步 PCB 流程
+运行完整 18 步 PCB 流程:ATmega328 USB-C 3.3V 8MHz,run_name 用 demo-pcb。
 
 # 独立审查一个已有 KiCad 工程
 审查 runs/demo-pcb 里的 KiCad 工程并生成 Markdown 报告。
@@ -406,7 +412,7 @@ python scripts/run_case_suite.py --compare data/ratsnestpro/suite/<基线>.json 
 
 - [ ] SAME54 工业网关用例(RMII PHY、CAN-FD、microSD、0–10 V 模拟输入、四层板),用于覆盖符号获取的回退阶梯
 - [ ] `factclaim` 降压链识别(把稳压器输入电压和逻辑供电电压区分开)
-- [ ] 把器件族覆盖扩展到确定性 ATmega328 参考板之外
+- [ ] 把选型后的事实表与验证配置覆盖扩展到确定性 ATmega328 参考板之外
 
 ---
 

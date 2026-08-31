@@ -5,10 +5,14 @@ from __future__ import annotations
 import pytest
 
 from ratsnestpro.cli import main
+from ratsnestpro.domain.contracts import GateStatus
 from ratsnestpro.eda import SchematicDoc
 from ratsnestpro.families import Atmega328Params
 from ratsnestpro.orchestration import generate_design, review_project
-from ratsnestpro.orchestration.review_project import ReviewProjectError
+from ratsnestpro.orchestration.review_project import (
+    ReviewProjectError,
+    _component_release_gate,
+)
 
 
 def test_review_generated_project(tmp_path) -> None:
@@ -58,6 +62,47 @@ def test_review_empty_dir_raises(tmp_path) -> None:
     (tmp_path / "empty").mkdir()
     with pytest.raises(ReviewProjectError):
         review_project(tmp_path / "empty", mode="offline")
+
+
+def test_missing_procurement_release_proof_is_advisory(tmp_path) -> None:
+    gate = _component_release_gate(tmp_path, None, None)
+
+    assert gate.status == GateStatus.FAILED
+    assert not gate.required
+
+
+def test_review_rejects_net_assigned_board_with_no_copper_tracks(tmp_path) -> None:
+    pcb = tmp_path / "unrouted.kicad_pcb"
+    pcb.write_text(
+        """(kicad_pcb
+  (version 20240108)
+  (generator \"ratsnest-test\")
+  (net 0 \"\")
+  (net 1 \"SIG\")
+  (footprint \"T:Part\" (layer \"F.Cu\") (at 10 10)
+    (property \"Reference\" \"R1\" (at 0 0 0))
+    (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\") (net 1 \"SIG\")))
+  (footprint \"T:Part\" (layer \"F.Cu\") (at 20 10)
+    (property \"Reference\" \"R2\" (at 0 0 0))
+    (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\") (net 1 \"SIG\")))
+  (gr_rect (start 0 0) (end 30 20) (stroke (width 0.05) (type default))
+    (fill none) (layer \"Edge.Cuts\"))
+)\n""",
+        encoding="utf-8",
+    )
+
+    result = review_project(pcb, mode="offline")
+    manufacturing = next(
+        gate for gate in result.result.report.gates if gate.gate == "manufacturing"
+    )
+
+    assert manufacturing.status == GateStatus.FAILED
+    assert manufacturing.required
+    assert result.blocked
+    assert any(
+        "no copper track" in finding.summary
+        for finding in manufacturing.findings
+    )
 
 
 def test_cli_review(tmp_path, capsys) -> None:

@@ -1,8 +1,9 @@
 """Deterministic heuristics used as the offline path and the auto-mode fallback.
 
-These contain no LLM calls. They provide a keyword-based requirement→params
-extraction and a conservative family judgment so the agent can run fully
-offline and so auto-mode has something safe to fall back to.
+These contain no LLM calls. They support only the explicit ATmega328 reference
+template in legacy pipeline A: keyword-based requirement→params extraction and
+template qualification let that path run fully offline. Adaptive pipeline B
+uses capability constraints and performs device selection later.
 """
 
 from __future__ import annotations
@@ -51,8 +52,7 @@ def params_from_requirement(text: str) -> dict[str, object]:
 
 
 def judge_family(text: str) -> FamilyDecision:
-    """Conservative deterministic family judgment: qualified if the text names
-    the ATmega328 family."""
+    """Qualify an explicit request for legacy pipeline A's ATmega328 template."""
     t = text.lower()
     qualified = any(k in t for k in _FAMILY_KEYWORDS)
     if qualified:

@@ -206,6 +206,16 @@ def check_ldo_caps(ir: CircuitIR, exp: Expectations) -> list[Finding]:
             )
     supply_pins = _pins_on_net(ir, exp.supply_net)
     for c in outs:
+        if c.value != exp.ldo_output_cap:
+            out.append(
+                _finding(
+                    "LDO-005",
+                    Severity.ERROR,
+                    f"power-stage output cap {c.ref} value {c.value} != "
+                    f"{exp.ldo_output_cap}",
+                    component_refs=[c.ref],
+                )
+            )
         if f"{c.ref}:1" not in supply_pins:
             out.append(
                 _finding(

@@ -20,6 +20,9 @@ def test_default_params_reproduce_reference() -> None:
     # two headers, four mounting holes
     assert len(ir.components_with_role("breakout_header")) == 2
     assert len(ir.components_with_role("mounting_hole")) == 4
+    assert ir.component("U1").value == "AP22804AW5-7"
+    assert ir.net("5V") is not None
+    assert ir.net("3V3") is None
 
 
 def test_16mhz_on_3v3_is_rejected() -> None:
@@ -35,6 +38,8 @@ def test_8mhz_on_3v3_is_allowed_and_changes_board() -> None:
     # 8 MHz load cap differs from 16 MHz
     loads = ir.components_with_role("crystal_load")
     assert all(c.value == "22pF" for c in loads)
+    assert ir.component("U1").value == "MIC5504-3.3YM5-TR"
+    assert ir.net("3V3") is not None
 
 
 def test_load_cap_linkage() -> None:
@@ -64,6 +69,8 @@ def test_board_plan_places_every_component() -> None:
     ir = build_ir(p)
     plan = build_plan(p)
     assert {pl.ref for pl in plan.placements} == {c.ref for c in ir.components}
+    coordinates = [(pl.x_mm, pl.y_mm) for pl in plan.placements]
+    assert len(coordinates) == len(set(coordinates))
 
 
 def test_expectations_track_params() -> None:
@@ -72,3 +79,4 @@ def test_expectations_track_params() -> None:
     assert exp.decoupling_count == 5
     assert exp.crystal_load_cap == "22pF"
     assert exp.supply_voltage_v == 3.3
+    assert exp.supply_net == "3V3"

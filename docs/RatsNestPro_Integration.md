@@ -13,7 +13,7 @@ classes named “agent”. Its original implementation has:
 - an independent Reviewer that cannot alter authoritative gate severities;
 - bounded tool authority: the Coder can only apply validated `set_param`
   operations and cannot write arbitrary files or execute a shell;
-- a fixed 17-step knowledge-driven PCB pipeline with fail-closed checks.
+- a fixed 18-step knowledge-driven PCB pipeline with fail-closed checks.
 
 Before this integration it was a weakly autonomous, fixed-orchestration MAS.
 The roles were real, but there was no LangGraph supervisor, graph-level
@@ -27,8 +27,8 @@ LangGraph supervisor examples:
 
 | Sub-agent | Framework responsibility | Preserved RatsNestPro capability |
 | --- | --- | --- |
-| Architect | Requirement research and plan delegation, with Web Search | Family judgment, parameter selection, immutable `DesignPlan` |
-| Hardware Engineer | Generation and repair delegation | Pipeline A and the full 17-step pipeline B |
+| Architect | Requirement research and plan delegation, with Web Search | Capability/constraint freeze, explicit-identity preservation, immutable `DesignPlan` |
+| Hardware Engineer | Generation and repair delegation | Pipeline A and the full 18-step pipeline B |
 | Reviewer | Independent audit delegation | Arbitrary KiCad project review and severity-preserving narrative |
 | Parts Specialist | Grounded catalog delegation | Local JLCPCB SQLite search without invented MPN/LCSC data |
 
@@ -68,12 +68,15 @@ Only `build` is gated. A review, a parts lookup, or a research request cannot
 damage hardware by proceeding, so they are not interrupted.
 
 ATmega328 is the deterministic offline example, not the system's family
-boundary. A named non-ATmega MCU is sent to pipeline B in `required` mode through
-an adapter to the toolkit model. Before component selection, the pipeline scans
-the installed KiCad libraries and gives the model exact matching MCU symbol and
-default-footprint IDs. Bottom-line checks then require both the requested MCU
-identity and its declared package. Consequently, a request such as RP2040 cannot
-fall back to or be relabeled from the ATmega example.
+boundary. Pipeline B starts from capabilities: topology freezes interfaces,
+memory, performance, power, package and procurement constraints, then selection
+chooses a grounded MCU/SoC. A broad family supplied by the user narrows the
+candidate set without selecting a concrete device; otherwise family data is
+loaded after selection as datasheet and validation metadata. If the user
+explicitly fixes an exact MCU,
+the pipeline scans installed KiCad libraries for its exact symbol and footprint
+and forbids silent substitution. Merely mentioning alternatives such as
+"STM32 or ESP32" does not create two mandatory MCUs.
 
 ## Service and frontend
 
@@ -123,7 +126,7 @@ Open the existing Streamlit app and select `ratsnestpro-multi-agent`.
 Example requests:
 
 - `为 ATmega328 USB-C 5V 16MHz 开发板生成不可变设计计划，run_name 用 demo-plan。`
-- `运行完整 17 步 PCB 流程：ATmega328 USB-C 3.3V 8MHz，run_name 用 demo-pcb。`
+- `运行完整 18 步 PCB 流程：ATmega328 USB-C 3.3V 8MHz，run_name 用 demo-pcb。`
 - `审查 runs/demo-pcb 里的 KiCad 工程并生成 Markdown 报告。`
 - `在本地 JLCPCB 缓存中搜索 10k 0603。`
 
@@ -147,8 +150,10 @@ docker compose run --rm agent_service ratsnestpro --help
   DSN export, SES import, and zero unconnected items a blocking production gate.
 - Set `RATSNESTPRO_REQUIRE_FREEROUTING=false` only for planning/test contexts
   where an unrouted PCB is intentionally acceptable as an intermediate.
-- Real symbol and footprint grounding requires container-visible
-  `KICAD_SYMBOL_DIR` and `KICAD_FOOTPRINT_DIR`.
+- Symbol and footprint grounding auto-discovers standard KiCad layouts on
+  Linux, Windows, and macOS (including `KiCad.app/Contents/SharedSupport`).
+  `KICAD_SYMBOL_DIR` and `KICAD_FOOTPRINT_DIR` remain optional overrides for
+  custom or mounted libraries.
 - Grounded part search requires `jlcpcb.sqlite` below the configured
   `KICAD_MCP_HOME` (Compose defaults it to
   `/data/ratsnestpro/cache`).

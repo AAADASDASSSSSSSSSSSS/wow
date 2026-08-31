@@ -73,9 +73,14 @@ def generate_design(
     out.mkdir(parents=True, exist_ok=True)
 
     plan = build_design_plan(requirement_text, params, project_name)
+    expectations = expectations_for(params)
 
     # Materialize the schematic.
-    doc = materialize_design(plan.circuit, plan.board, supply_net="3V3")
+    doc = materialize_design(
+        plan.circuit,
+        plan.board,
+        supply_net=expectations.supply_net,
+    )
     sch_path = out / f"{project_name}.kicad_sch"
     doc.save(sch_path)
 
@@ -86,7 +91,6 @@ def generate_design(
     pro_path.write_text(json.dumps(pro, indent=2), encoding="utf-8")
 
     # Verify (ERC only if requested).
-    expectations = expectations_for(params)
     report = verify_design(
         plan.circuit,
         expectations,

@@ -321,8 +321,11 @@ class VerificationReport(ContractModel):
 
 
 class FamilyDecision(ContractModel):
-    """Architect's gatekeeping decision: does the request belong to a known,
-    qualified circuit family, with all mandatory features preserved?"""
+    """Legacy deterministic-template gate, currently for pipeline A only.
+
+    The adaptive pipeline does not classify new requirements by device family;
+    it freezes capabilities and selects a device before attaching family facts.
+    """
 
     qualified: bool
     family: str = Field(default="", max_length=120)

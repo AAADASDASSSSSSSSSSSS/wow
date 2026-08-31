@@ -17,6 +17,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from ratsnestpro.eda import factclaim
 from ratsnestpro.eda.factclaim import ACK_PREFIX
 from ratsnestpro.eda.factsheet import fact_sheets_named
+from ratsnestpro.orchestration.pipeline import PIPELINE_TOTAL_STEPS
 
 from agents.language import language_directive, localized, reply_language
 from agents.ratsnestpro import local_evidence
@@ -37,6 +38,7 @@ from agents.ratsnestpro.decisions import (
     intent_decisions,
     ledger,
     parse_picks,
+    part_selection_decisions,
     payload_block,
     pick_token,
     render,
@@ -519,6 +521,7 @@ async def initialize(
         "component_constraints": constraints.to_state(),
         "capability": {
             "required_capabilities": capabilities,
+            "selection_mode": "fixed_exact" if primary else "capability_only",
             "primary_mcu": primary.token if primary else "",
             "primary_mcu_sources": list(primary.sources) if primary else [],
             "primary_mcu_package": primary.package if primary else "",
@@ -970,6 +973,12 @@ _ARCHITECT_INSTRUCTIONS = (
     "conventions and process_capability supply the board-level values no datasheet "
     "states.\n"
     "\n"
+    "IDENTITY TIMING. If mcu_constraint is empty, freeze required interfaces, "
+    "memory, performance, power, package, lifecycle and toolchain constraints, "
+    "but do not choose or imply an STM32/ESP32/RP2040/AVR family. Exact identity "
+    "belongs to the selection phase. If mcu_constraint is present, preserve it "
+    "exactly and treat family only as downstream datasheet metadata.\n"
+    "\n"
     "NEVER ASK FOR EVIDENCE YOU WERE GIVEN. Before writing that something is "
     "missing, search the supplied fact_sheets, candidate_by_step, symbol pin map "
     "and conventions for it. Pin numbers, decoupling values and placement, "
@@ -1062,20 +1071,20 @@ _ARCHITECT_UNAVAILABLE = {
 # language too. Status tokens and counts stay verbatim inside the placeholders.
 _PARTS_SUMMARY = {
     "en": (
-        "Parts Specialist used only the local catalog. Status: {status}. "
-        "No external availability claims were added."
+        "Parts Specialist used the configured catalog chain. Status: {status}. "
+        "Provider availability and evidence gaps remain explicit."
     ),
-    "zh": "选型专家仅使用本地目录。状态：{status}。未添加任何外部库存/供货声明。",
+    "zh": "选型专家使用已配置的目录链。状态：{status}。供应商可用性和证据缺口均已明确记录。",
 }
 
 _HARDWARE_SUMMARY = {
     "en": (
         "Hardware Engineer real pipeline status: {status}. "
-        "Completed steps: {completed}/17. Actual files: {files}. "
+        "Completed steps: {completed}/{total}. Actual files: {files}. "
         "Release blockers: {blockers}."
     ),
     "zh": (
-        "硬件工程师实际流水线状态：{status}。已完成步骤：{completed}/17。"
+        "硬件工程师实际流水线状态：{status}。已完成步骤：{completed}/{total}。"
         "实际产出文件：{files}。发布阻塞项：{blockers}。"
     ),
 }
@@ -1117,24 +1126,30 @@ async def architect_phase(
     if mcu_constraint is None:
         constraints = ConstraintSet.from_requirement(requirement)
         mcu_constraint = constraints.mcu
-    symbol_query = (
-        mcu_constraint.manufacturer_part_number
-        if mcu_constraint
-        else (_primary_mcu_mention(requirement) or requirement[:120])
-    )
+    capability_only = mcu_constraint is None
+    symbol_query = mcu_constraint.manufacturer_part_number if mcu_constraint else ""
     required_package = mcu_constraint.package if mcu_constraint else ""
-    symbol_args = {
-        "query": symbol_query,
-        "limit": 3,
-        "required_package": required_package,
-    }
-    symbol_raw, symbol_result, _ = await _call_json_with_retry(
-        lambda: ratsnest_lookup_kicad_symbol(**symbol_args),
-        phase="architect",
-        tool="ratsnest_lookup_kicad_symbol",
-        attempts=2,
-        require_nonempty="candidates",
-    )
+    symbol_args: dict[str, Any] = {}
+    if capability_only:
+        symbol_result = {
+            "status": "deferred",
+            "candidates": [],
+            "reason": "MCU identity is selected after capability constraints are frozen",
+        }
+        symbol_raw = json.dumps(symbol_result, ensure_ascii=False)
+    else:
+        symbol_args = {
+            "query": symbol_query,
+            "limit": 3,
+            "required_package": required_package,
+        }
+        symbol_raw, symbol_result, _ = await _call_json_with_retry(
+            lambda: ratsnest_lookup_kicad_symbol(**symbol_args),
+            phase="architect",
+            tool="ratsnest_lookup_kicad_symbol",
+            attempts=2,
+            require_nonempty="candidates",
+        )
 
     # Every other constrained part, not just the MCU. The symbol index is local,
     # so this costs no network, and without it the Architect reports a connector
@@ -1165,15 +1180,26 @@ async def architect_phase(
         {"status": "ok", "coverage": local_coverage}, ensure_ascii=False, indent=2
     )
 
-    search_query = f"{symbol_query} official manufacturer datasheet hardware design reference"
-    search_args = {"query": search_query}
-    search_raw, search_result, _ = await _call_json_with_retry(
-        lambda: web_search.invoke(search_args),
-        phase="architect",
-        tool="web_search",
-        attempts=3,
-        require_nonempty="results",
-    )
+    search_args: dict[str, Any] = {}
+    if capability_only:
+        search_result = {
+            "status": "deferred",
+            "results": [],
+            "reason": "device-specific evidence is loaded after MCU selection",
+        }
+        search_raw = json.dumps(search_result, ensure_ascii=False)
+    else:
+        search_query = (
+            f"{symbol_query} official manufacturer datasheet hardware design reference"
+        )
+        search_args = {"query": search_query}
+        search_raw, search_result, _ = await _call_json_with_retry(
+            lambda: web_search.invoke(search_args),
+            phase="architect",
+            tool="web_search",
+            attempts=3,
+            require_nonempty="results",
+        )
 
     datasheet_args: dict[str, Any] | None = None
     datasheet_raw = ""
@@ -1212,6 +1238,11 @@ async def architect_phase(
 
     evidence = {
         "requirement": requirement,
+        "selection_mode": "capability_only" if capability_only else "fixed_exact",
+        "mcu_constraint": mcu_constraint.model_dump() if mcu_constraint else {},
+        "required_capabilities": state.get("capability", {}).get(
+            "required_capabilities", required_capabilities(requirement)
+        ),
         "kicad_symbol": symbol_result,
         "supporting_symbols": supporting_symbols,
         "fact_sheets": local_facts["fact_sheets"],
@@ -1265,7 +1296,11 @@ async def architect_phase(
     symbol_ok = symbol_result.get("status") == "ok" and bool(symbol_result.get("candidates"))
     if acquisition is not None:
         symbol_ok = acquisition.resolved
-    if not symbol_ok:
+    if capability_only:
+        # No device exists yet to look up. Requiring a symbol or datasheet here
+        # would make every requirement-driven design block before selection.
+        status = "ok"
+    elif not symbol_ok:
         status = "blocked"
     elif source_ok and datasheet_ok:
         status = "ok"
@@ -1275,10 +1310,14 @@ async def architect_phase(
         # intermediate artifacts from grounded KiCad/library evidence.
         status = "partial"
     inner_messages = [
-        *_tool_messages("ratsnest_lookup_kicad_symbol", symbol_args, symbol_raw),
         *_tool_messages("ratsnest_local_evidence", local_args, local_raw),
-        *_tool_messages("web_search", search_args, search_raw),
     ]
+    if symbol_args:
+        inner_messages.extend(
+            _tool_messages("ratsnest_lookup_kicad_symbol", symbol_args, symbol_raw)
+        )
+    if search_args:
+        inner_messages.extend(_tool_messages("web_search", search_args, search_raw))
     for supporting_args, supporting_raw in supporting_calls:
         inner_messages.extend(
             _tool_messages("ratsnest_lookup_kicad_symbol", supporting_args, supporting_raw)
@@ -1309,6 +1348,7 @@ async def architect_phase(
         }
     architecture = {
         "status": status,
+        "selection_mode": "capability_only" if capability_only else "fixed_exact",
         "symbol": symbol_result,
         "search": search_result,
         "datasheet": datasheet_result,
@@ -1318,7 +1358,9 @@ async def architect_phase(
         "local_evidence": local_coverage,
         "mcu_constraint": mcu_constraint.model_dump() if mcu_constraint else {},
     }
-    if acquisition is not None and not acquisition.resolved:
+    if capability_only:
+        evidence_detail = "MCU identity deferred to capability-driven selection"
+    elif acquisition is not None and not acquisition.resolved:
         evidence_detail = (
             f"{acquisition.requested_mpn}: {acquisition.failure_class}; "
             f"{len(acquisition.rejected)} candidate(s) rejected"
@@ -1340,7 +1382,11 @@ async def architect_phase(
         "trace": _append_trace(
             state,
             agent="Architect",
-            tool="ratsnest_lookup_kicad_symbol + web_search + fetch_datasheet",
+            tool=(
+                "ratsnest_local_evidence"
+                if capability_only
+                else "ratsnest_lookup_kicad_symbol + web_search + fetch_datasheet"
+            ),
             status=status,
             evidence=evidence_detail,
         ),
@@ -1348,30 +1394,40 @@ async def architect_phase(
     }
 
 
-def _component_queries(requirement: str) -> list[str]:
-    ignored = {
-        "LQFP64",
-        "USB-C",
-        "SDIO",
-        "SPI1",
-        "SPI2",
-        "I2C1",
-        "CAN1",
-    }
+def _component_queries(
+    requirement: str,
+    component_constraints: list[dict[str, Any]] | None = None,
+) -> list[str]:
     queries: list[str] = []
     primary_mcu = _primary_mcu_mention(requirement)
     if primary_mcu:
         queries.append(primary_mcu)
-    queries.extend(token for token in _positive_mcu_mentions(requirement) if token not in ignored)
-    return list(dict.fromkeys(queries))[:12] or [requirement[:120]]
+    for constraint in component_constraints or []:
+        if not isinstance(constraint, dict):
+            continue
+        token = str(constraint.get("manufacturer_part_number") or "").strip()
+        role = str(constraint.get("role") or "").strip()
+        if token:
+            queries.append(token)
+        elif role:
+            queries.append(role)
+    return list(dict.fromkeys(queries))[:12]
 
 
 async def parts_phase(state: RatsNestWorkflowState) -> dict[str, Any]:
     _workflow_event("parts-specialist", "started")
     results: list[dict[str, Any]] = []
     inner_messages: list[Any] = []
-    for query in _component_queries(state["requirement"]):
-        args = {"query": query, "limit": 10}
+    constraints = state.get("component_constraints")
+    for query in _component_queries(state["requirement"], constraints):
+        package = ""
+        for constraint in constraints or []:
+            if isinstance(constraint, dict) and (
+                str(constraint.get("manufacturer_part_number") or "") == query
+            ):
+                package = str(constraint.get("package") or "")
+                break
+        args = {"query": query, "limit": 10, "package": package}
         raw, parsed, _ = await _call_json_with_retry(
             lambda args=args: ratsnest_search_parts(**args),
             phase="parts-specialist",
@@ -1392,9 +1448,34 @@ async def parts_phase(state: RatsNestWorkflowState) -> dict[str, Any]:
         # An empty optional/local catalog is an evidence gap, not proof that the
         # requested design is impossible. Continue without inventing MPN/stock.
         status = "partial"
-    summary = localized(_PARTS_SUMMARY, _reply_language(state)).format(status=status)
+    language = _reply_language(state)
+    settled_slots = frozenset(
+        str(record.get("slot") or "")
+        for record in state.get("resolved_decisions", [])
+        if isinstance(record, dict)
+    )
+    part_decisions = part_selection_decisions(
+        [
+            {
+                "query": item["query"],
+                **(
+                    item["result"]
+                    if isinstance(item.get("result"), dict)
+                    else {}
+                ),
+            }
+            for item in results
+        ],
+        language,
+        settled=settled_slots,
+    )
+    summary = localized(_PARTS_SUMMARY, language).format(status=status)
     inner_messages.append(AIMessage(content=summary))
-    parts = {"status": status, "queries": results}
+    parts = {
+        "status": status,
+        "queries": results,
+        "selection_decisions": to_state(part_decisions),
+    }
     if status == "unavailable":
         trace_evidence = f"{len(results)} local catalog query attempt(s); cache unavailable"
     else:
@@ -1407,6 +1488,7 @@ async def parts_phase(state: RatsNestWorkflowState) -> dict[str, Any]:
     )
     return {
         "parts": parts,
+        "open_decisions": to_state(part_decisions),
         "trace": _append_trace(
             state,
             agent="Parts Specialist",
@@ -1463,9 +1545,22 @@ def _validate_hardware_result(result: dict[str, Any]) -> dict[str, Any]:
         and drc.get("errors") == 0
         and drc.get("unconnected") == 0
     )
-    release_ready = (
+    # Results written before the component_prepare stage predate this field and
+    # remain valid for callers that only perform the legacy hardware gate. New
+    # pipeline results always include it and therefore must satisfy the 18-step
+    # contract below.
+    legacy_result = (
+        "component_release_ready" not in result
+        and result.get("total_steps") == 17
+    )
+    component_release_ready = result.get("component_release_ready", True) is True
+    step_count_ok = (
+        result.get("completed_steps") == result.get("total_steps") == PIPELINE_TOTAL_STEPS
+        or legacy_result
+    )
+    design_complete = (
         result.get("status") == "ok"
-        and result.get("completed_steps") == result.get("total_steps") == 17
+        and step_count_ok
         and routing.get("method") == "freerouting"
         and routing.get("unconnected") == 0
         and has_schematic
@@ -1474,6 +1569,10 @@ def _validate_hardware_result(result: dict[str, Any]) -> dict[str, Any]:
         and has_ses
         and erc_clean
         and drc_clean
+    )
+    release_ready = (
+        design_complete
+        and component_release_ready
     )
     blockers: list[str] = []
     if not has_schematic:
@@ -1488,8 +1587,14 @@ def _validate_hardware_result(result: dict[str, Any]) -> dict[str, Any]:
         blockers.append("Freerouting did not complete")
     if routing.get("unconnected") != 0:
         blockers.append("routing unconnected count is not zero")
-    if result.get("completed_steps") != 17:
-        blockers.append("17-step pipeline did not complete")
+    if not step_count_ok:
+        blockers.append(f"{PIPELINE_TOTAL_STEPS}-step pipeline did not complete")
+    if not component_release_ready:
+        blockers.extend(
+            str(item)
+            for item in result.get("component_release_blockers", [])
+            if str(item) not in blockers
+        )
     if not erc.get("available"):
         blockers.append("kicad-cli ERC unavailable")
     elif not erc.get("ran"):
@@ -1506,6 +1611,7 @@ def _validate_hardware_result(result: dict[str, Any]) -> dict[str, Any]:
         blockers.append(f"kicad-cli DRC reported {drc.get('unconnected')} unconnected item(s)")
     validated["actual_files"] = sorted(actual_files)
     validated["project_available"] = has_schematic or has_pcb
+    validated["design_complete"] = design_complete
     validated["release_ready"] = release_ready
     validated["release_blockers"] = blockers
     return validated
@@ -1572,6 +1678,42 @@ def _hardware_requirement(state: RatsNestWorkflowState, review_feedback: str = "
         "power design, pin mapping, and checks; do not replace it with recalled facts:\n"
         f"{json.dumps(grounded_evidence, ensure_ascii=False)}"
     )
+    part_records = state.get("parts", {}).get("queries", [])
+    if part_records:
+        catalog_evidence = [
+            {
+                "query": item.get("query", ""),
+                "status": item.get("result", {}).get("status", "")
+                if isinstance(item.get("result"), dict)
+                else "",
+                "results": (
+                    item.get("result", {}).get("results", [])[:5]
+                    if isinstance(item.get("result"), dict)
+                    else []
+                ),
+            }
+            for item in part_records
+            if isinstance(item, dict)
+        ]
+        requirement += (
+            "\n\nGROUNDED CATALOG EVIDENCE — these are provider snapshots, not model "
+            "memory. Preserve a user-selected MPN when one is recorded; otherwise "
+            "rank by manufacturability, package, JLC Basic, stock, lead time, then "
+            "price. Missing provider data is a release gap, not a reason to invent "
+            "a part:\n"
+            f"{json.dumps(catalog_evidence, ensure_ascii=False)}"
+        )
+    selected_decisions = [
+        record
+        for record in state.get("resolved_decisions", [])
+        if isinstance(record, dict) and record.get("kind") == "part_selection"
+    ]
+    if selected_decisions:
+        requirement += (
+            "\n\nUSER-SELECTED CATALOG CANDIDATES — honor these exact decisions in the "
+            "selection step; do not silently replace them:\n"
+            f"{json.dumps(selected_decisions, ensure_ascii=False)}"
+        )
     # The object-level digest is what makes a repair actionable. Feeding back a
     # bare error count made the model delete nets and the error count grew, so
     # name the exact refs, pins and rules that must be resolved.
@@ -1659,10 +1801,14 @@ async def _run_hardware(
         if repair_regressed(state["hardware"], result):
             regressed = True
             authoritative = state["hardware"]
-    status = "ok" if authoritative["release_ready"] else "blocked"
+    # A missing optional procurement snapshot must not trigger an electrical
+    # repair loop after the routed project, ERC and DRC are already complete.
+    # Keep ``release_ready`` false for purchasing/manufacturing release, while
+    # treating the technical board design as completed and reviewable.
+    status = "ok" if authoritative["design_complete"] else "blocked"
     # Section 4.3/4.8: a blocked attempt is diagnosed, then answered with a
     # scoped patch that re-enters the pipeline at the failing step instead of
-    # restarting the 17 steps or giving up.
+    # restarting the pipeline or giving up.
     report = FailureDiagnoser().diagnose_pipeline_result(authoritative)
     constraints = ConstraintSet.from_state(state.get("component_constraints"))
     # Coverage must be judged against what the pipeline actually selected, not
@@ -1719,6 +1865,7 @@ async def _run_hardware(
     summary = localized(_HARDWARE_SUMMARY, language).format(
         status=status,
         completed=authoritative.get("completed_steps", 0),
+        total=authoritative.get("total_steps", PIPELINE_TOTAL_STEPS),
         files=len(authoritative["actual_files"]),
         blockers=authoritative["release_blockers"],
     )
@@ -1741,7 +1888,10 @@ async def _run_hardware(
     _workflow_event(
         phase_name,
         "completed" if status == "ok" else ("rolled_back" if regressed else "blocked"),
-        detail=f"{authoritative.get('completed_steps', 0)}/17 steps"
+        detail=(
+            f"{authoritative.get('completed_steps', 0)}/"
+            f"{authoritative.get('total_steps', PIPELINE_TOTAL_STEPS)} steps"
+        )
         + (f"; {len(digest.errors)} verification error(s)" if digest.findings else ""),
     )
     return {
@@ -1768,7 +1918,8 @@ async def _run_hardware(
             tool="ratsnest_run_pcb_pipeline",
             status="rolled_back" if regressed else status,
             evidence=(
-                f"{authoritative.get('completed_steps', 0)}/17 steps; "
+                f"{authoritative.get('completed_steps', 0)}/"
+                f"{authoritative.get('total_steps', PIPELINE_TOTAL_STEPS)} steps; "
                 f"release_ready={authoritative['release_ready']}"
                 + (f"; {evaluation.summary()}" if evaluation is not None else "")
             ),
@@ -1913,7 +2064,7 @@ _REPORT_LABELS: dict[str, dict[str, str]] = {
         "zh": "| Agent | 必需工具 | 状态 | 证据 |",
     },
     "release_gates": {"en": "Release gates", "zh": "发布门禁"},
-    "pipeline_steps": {"en": "Pipeline: {done}/17 steps", "zh": "流水线：{done}/17 步"},
+    "pipeline_steps": {"en": "Pipeline: {done}/{total} steps", "zh": "流水线：{done}/{total} 步"},
     "freerouting_method": {"en": "Freerouting method", "zh": "Freerouting 方式"},
     "unconnected": {"en": "Unconnected", "zh": "未连接数"},
     "erc_errors": {"en": "kicad-cli ERC errors", "zh": "kicad-cli ERC 错误"},
@@ -1921,6 +2072,8 @@ _REPORT_LABELS: dict[str, dict[str, str]] = {
     "drc_unconnected": {"en": "kicad-cli DRC unconnected", "zh": "kicad-cli DRC 未连接"},
     "independent_review": {"en": "Independent review", "zh": "独立评审"},
     "parts_verification": {"en": "Parts verification", "zh": "选型核验"},
+    "design_complete": {"en": "Technical design complete", "zh": "技术设计完成"},
+    "component_release": {"en": "Component release", "zh": "器件发布状态"},
     "blocking_conditions": {"en": "Blocking conditions", "zh": "阻塞条件"},
     "fixed_constraints": {"en": "Fixed component constraints", "zh": "固定器件约束"},
     "accepted_risks": {
@@ -2019,14 +2172,17 @@ def final_report(state: RatsNestWorkflowState) -> dict[str, Any]:
         review = state.get("review", {})
         parts = state.get("parts", {})
         architecture = state.get("architecture", {})
-        overall = (
-            "success"
-            if hardware.get("release_ready")
+        if (
+            hardware.get("release_ready")
             and review.get("status") == "ok"
             and parts.get("status") in {"ok", "partial", "unavailable"}
             and architecture.get("status") == "ok"
-            else "blocked"
-        )
+        ):
+            overall = "success"
+        elif hardware.get("project_available") or hardware.get("actual_files"):
+            overall = "delivered_with_issues"
+        else:
+            overall = "blocked"
 
     intent = state.get("intent", {})
     lines = [
@@ -2073,7 +2229,7 @@ def final_report(state: RatsNestWorkflowState) -> dict[str, Any]:
                 "",
                 f"## {label('release_gates')}",
                 "",
-                f"- {label('pipeline_steps', done=hardware.get('completed_steps', 0))}",
+                f"- {label('pipeline_steps', done=hardware.get('completed_steps', 0), total=hardware.get('total_steps', PIPELINE_TOTAL_STEPS))}",
                 (
                     f"- {label('freerouting_method')}: "
                     f"{hardware.get('routing', {}).get('method', 'not_reached')}"
@@ -2101,6 +2257,14 @@ def final_report(state: RatsNestWorkflowState) -> dict[str, Any]:
                 (
                     f"- {label('parts_verification')}: "
                     f"{state.get('parts', {}).get('status', 'not_run')}"
+                ),
+                (
+                    f"- {label('design_complete')}: "
+                    f"{str(hardware.get('design_complete', False)).lower()}"
+                ),
+                (
+                    f"- {label('component_release')}: "
+                    f"{str(hardware.get('component_release_ready', False)).lower()}"
                 ),
             ]
         )
@@ -2336,6 +2500,8 @@ def _after_parts(state: RatsNestWorkflowState) -> str:
         and state.get("parts", {}).get("status") in {"ok", "partial", "unavailable"}
     ):
         return "final_report"
+    if state.get("open_decisions"):
+        return "clarify_open_decisions"
     # Same argument as the risk gate: ask while nothing has been written yet.
     if not state.get("missing_data_asked") and _pending_assumption_decisions(state):
         return "clarify_missing_data"
@@ -2353,7 +2519,9 @@ def _ahe_enabled() -> bool:
 def _after_hardware(state: RatsNestWorkflowState) -> str:
     # Section 4.3: a blocked attempt with a recoverable diagnosis is repaired
     # in-task; an unrecoverable one falls through to review/reporting.
-    if not state.get("hardware", {}).get("release_ready"):
+    hardware = state.get("hardware", {})
+    design_complete = hardware.get("design_complete", hardware.get("release_ready", False))
+    if not design_complete:
         diagnosis = state.get("diagnosis", {})
         rounds_left = state.get("review_round", 0) < state.get("max_review_rounds", 2)
         if (

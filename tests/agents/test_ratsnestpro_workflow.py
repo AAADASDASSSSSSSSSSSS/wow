@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage
+from ratsnestpro.orchestration.pipeline import PIPELINE_TOTAL_STEPS
 
 from agents.ratsnestpro.ratsnestpro_agent import (
     _after_architect,
@@ -166,6 +167,60 @@ async def test_architect_uses_exact_mcu_symbol_datasheet_before_search_results(
     assert result["architecture"]["status"] == "ok"
 
 
+@pytest.mark.asyncio
+async def test_architect_defers_identity_lookup_for_capability_only_requirement(
+    monkeypatch,
+) -> None:
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("device-specific lookup ran before MCU selection")
+
+    class UnexpectedTool:
+        def invoke(self, *_args, **_kwargs):
+            return unexpected()
+
+    class FakeModel:
+        def with_config(self, **_kwargs):
+            return self
+
+        async def ainvoke(self, _messages, _config):
+            return AIMessage(content="capability design basis")
+
+    monkeypatch.setattr(
+        "agents.ratsnestpro.ratsnestpro_agent.ratsnest_lookup_kicad_symbol",
+        unexpected,
+    )
+    monkeypatch.setattr(
+        "agents.ratsnestpro.ratsnestpro_agent.web_search",
+        UnexpectedTool(),
+    )
+    monkeypatch.setattr(
+        "agents.ratsnestpro.ratsnestpro_agent.fetch_datasheet",
+        UnexpectedTool(),
+    )
+    monkeypatch.setattr(
+        "agents.ratsnestpro.ratsnestpro_agent.get_model",
+        lambda _model: FakeModel(),
+    )
+
+    result = await architect_phase(
+        {
+            "requirement": (
+                "需要 Wi-Fi、BLE、2 路 UART、12 路 GPIO 和低功耗，请按需求选择主控。"
+            ),
+            "capability": {
+                "selection_mode": "capability_only",
+                "required_capabilities": ["wifi", "bluetooth_le", "mcu_core"],
+            },
+            "trace": [],
+        },
+        {"configurable": {"model": "test"}},
+    )
+
+    assert result["architecture"]["status"] == "ok"
+    assert result["architecture"]["selection_mode"] == "capability_only"
+    assert result["architecture"]["symbol"]["status"] == "deferred"
+
+
 def test_hardware_requirement_carries_grounded_architect_evidence() -> None:
     requirement = _hardware_requirement(
         {
@@ -287,6 +342,54 @@ def test_hardware_gate_accepts_real_routed_project(
     assert result["release_ready"]
     assert result["project_available"]
     assert len(result["actual_files"]) == 4
+
+
+def test_missing_procurement_proof_does_not_undo_technical_completion(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("RATSNESTPRO_WORKSPACE_ROOT", str(tmp_path))
+    run = tmp_path / "runs" / "electrically-complete"
+    run.mkdir(parents=True)
+    for name, content in (
+        ("board.kicad_sch", "schematic"),
+        ("board.kicad_pcb", "pcb"),
+        ("board.dsn", "dsn"),
+        ("board.ses", "ses"),
+    ):
+        (run / name).write_text(content, encoding="utf-8")
+
+    result = _validate_hardware_result(
+        {
+            "status": "ok",
+            "run_directory": str(run),
+            "completed_steps": PIPELINE_TOTAL_STEPS,
+            "total_steps": PIPELINE_TOTAL_STEPS,
+            "component_release_ready": False,
+            "component_release_blockers": ["catalog API not configured"],
+            "routing": {"method": "freerouting", "unconnected": 0},
+            "verification": {
+                "erc": {
+                    "applicable": True,
+                    "available": True,
+                    "ran": True,
+                    "errors": 0,
+                },
+                "drc": {
+                    "applicable": True,
+                    "available": True,
+                    "ran": True,
+                    "errors": 0,
+                    "unconnected": 0,
+                },
+            },
+            "artifacts": [],
+        }
+    )
+
+    assert result["design_complete"]
+    assert not result["release_ready"]
+    assert "catalog API not configured" in result["release_blockers"]
 
 
 def test_hardware_gate_rejects_nonzero_kicad_cli_erc(

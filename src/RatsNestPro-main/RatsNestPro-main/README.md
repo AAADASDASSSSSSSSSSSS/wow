@@ -16,7 +16,7 @@
 1. **族内闭环生成(管线 A)** —— 只认证**一个电路族**(ATmega328P USB-C 开发板)。
    参数化生成一张可在 KiCad 10 打开的原理图,跑确定性 gate + ERC,失败可进修复循环。
    这是一条完整闭环、经过验证的"纵向切片"。
-2. **知识驱动 PCB 全流程管线(管线 B)** —— 一条**固定 17 步**的行业标准流程
+2. **知识驱动 PCB 全流程管线(管线 B)** —— 一条**固定 18 步**的行业标准流程
    (需求→拓扑→选型→原理图→布局→布线→制造),每步统一形态:
    **注入该步知识 → LLM 结构化产出 → 廉价"防烧板"兜底校验**。它把范围推进到
    **PCB 布局与布线**,并以真实符号/封装库和工艺表为硬事实来源。
@@ -36,7 +36,7 @@
 - [7. KiCad 库与工艺表配置](#7-kicad-库与工艺表配置)
 - [8. 命令行用法](#8-命令行用法)
 - [9. 管线 A:族内生成 + 验证 + 修复](#9-管线-a族内生成--验证--修复)
-- [10. 管线 B:知识驱动的 17 步 PCB 全流程](#10-管线-b知识驱动的-17-步-pcb-全流程)
+- [10. 管线 B:知识驱动的 18 步 PCB 全流程](#10-管线-b知识驱动的-18-步-pcb-全流程)
 - [11. 三个 Agent 角色](#11-三个-agent-角色)
 - [12. 两层知识:硬事实与软知识](#12-两层知识硬事实与软知识)
 - [13. EDA 适配层与真实库](#13-eda-适配层与真实库)
@@ -54,7 +54,7 @@
 RatsNestPro 接收自然语言需求,提供三种能力:
 
 - **设计(生成):** 两条流程可选 —— 管线 A 在 ATmega328 族内生成并验证**原理图**;
-  管线 B 走固定 17 步,把设计推进到**布局与布线**,产出 `.kicad_sch` + `.kicad_pcb` +
+  管线 B 走固定 18 步,把设计推进到**布局与布线**,产出 `.kicad_sch` + `.kicad_pcb` +
   BOM/CPL(+ 有 kicad-cli 时的 Gerber)。
 - **审查:** 对任意已有 KiCad 工程做确定性分析并产出结构化 Markdown 评审报告。
 - **修复:** 管线 A 的 gate 失败时,在类型化白名单内提议修正、执行、重验(半自动或全自动)。
@@ -101,9 +101,9 @@ KiCad 产物表达实际生成结果
 自然语言需求
   → Agent 层:   Architect(族判断+参数) / Coder(修复提议) / Reviewer(解释+分诊)   [EricAI]
   → 领域层:     CircuitIR / BoardPlan / Finding / Gate / Atmega328Params            [Pydantic]
-                + 17 步管线合同(TopologyPlan / SelectionPlan / NetlistIntent / ...)
+                + 18 步管线合同(TopologyPlan / SelectionPlan / ComponentPrepareResult / ...)
   → 编排层:     管线 A(plan→物化→ERC→验证→修复→审查)
-                管线 B(17 步:需求→拓扑→选型→原理图→布局→布线→制造)
+                管线 B(18 步:需求→拓扑→选型→器件准备→原理图→布局→布线→制造)
   → EDA 适配层: vendored kicad-mcp-py 核心(进程内、类型化,不走 MCP)
                 + 真实符号库(symbols.py)/ 真实封装库(footprints.py)
   → 验证/兜底层:确定性 IR 规则 + kicad-cli ERC + 工艺"防烧板"兜底 → Gate / CheckResult
@@ -151,7 +151,7 @@ RatsNestPro/
 │   │   ├── generate.py               # 【管线 A】generate_design() 单向生成闭环
 │   │   ├── repair.py                 # 【管线 A】run_repair() 半自动/自动修复循环
 │   │   ├── review_project.py         # review_project() 独立审查
-│   │   ├── pipeline.py               # 【管线 B】17 步 Pipeline + 步骤基类 + 运行器
+│   │   ├── pipeline.py               # 【管线 B】18 步 Pipeline + 步骤基类 + 运行器
 │   │   └── pipeline_contracts.py     # 【管线 B】每步 Pydantic 输入输出合同
 │   ├── knowledge/
 │   │   ├── store.py                  # KnowledgeBase(按 role 的向量/词法检索)+ build_default_kb
@@ -181,14 +181,15 @@ uv pip install -e ".[dev]"
 uv run pytest -q
 ```
 
-真实 EDA 路径需要本地安装 **KiCad 10**(`kicad-cli` 会被自动发现);缺失时 ERC / Gerber
-报告为 `unavailable`,**绝不被当作通过**。
+真实 EDA 路径需要本地安装 **KiCad 10**。`kicad-cli`、Symbol 和 Footprint 会在
+Windows、Linux 与 macOS(`KiCad.app/Contents/SharedSupport`)自动发现，也可用环境变量
+覆盖；缺失时 ERC / Gerber 报告为 `unavailable`，**绝不被当作通过**。
 
 ---
 
 ## 6. EricAI 配置
 
-EricAI 同时驱动三个 Agent 与 17 步管线的每步决策(`openai/gpt-oss-120b`),以及知识库检索
+EricAI 同时驱动三个 Agent 与 18 步管线的每步决策(`openai/gpt-oss-120b`),以及知识库检索
 (embedding `BAAI/bge-m3`、reranker `BAAI/bge-reranker-v2-m3`)。它采用 **SSO 设备码认证,
 无需 API key**。
 
@@ -253,7 +254,7 @@ ratsnestpro design "ATmega328 开发板,USB-C,8MHz,不要LED" --out runs/demo
 # 【管线 A】3) 生成;若被阻断则跑修复循环(默认半自动;--auto 全自动)
 ratsnestpro design "ATmega328 16MHz 5V" --out runs/demo --repair --max-iter 5
 
-# 【管线 B】4) 跑完整 17 步知识驱动 PCB 管线
+# 【管线 B】4) 跑完整 18 步知识驱动 PCB 管线
 ratsnestpro pcb "ATmega328 USB-C 3.3V 8MHz 开发板" --out runs/pcb --project board --llm offline
 
 # 5) 审查任意已有 KiCad 工程(独立于生成)
@@ -332,35 +333,43 @@ finding → **blocked**。`UNAVAILABLE`(如无 kicad-cli 的 ERC)**既不是通�
 
 ---
 
-## 10. 管线 B:知识驱动的 17 步 PCB 全流程
+## 10. 管线 B:知识驱动的 18 步 PCB 全流程
 
 `orchestration/pipeline.py` 固定一条行业标准流程,把设计推进到布局与布线。
 
-### 固定的 17 步(`PipelineStep` 枚举,顺序即权威)
+### 固定的 18 步(`PipelineStep` 枚举,顺序即权威)
 
 ```
 1  requirements           需求解析(归一化为 RequirementSpec)
 2  topology               拓扑设计(功能块 + 供电轨 + 地)
 3  selection              元件选型(符号/封装接地;MPN/LCSC 仅来自真实目录)
+4  component_prepare      器件准备(Symbol/Footprint/MPN/目录快照与发布清单)
    —— 原理图 ——
-4  schematic_connections  连接设计(逻辑网表 NetlistIntent)
-5  schematic_pinmap       引脚映射(逻辑引脚→真实器件引脚号)
-6  schematic_layout       原理图布局(sheet 摆放 + 标签/局部线)
-7  schematic_materialize  物化 .kicad_sch(round-trip 计数校验)
-8  erc                    ERC 兜底(确定性短路/单脚网 + 可选 kicad-cli ERC)
+5  schematic_connections  连接设计(逻辑网表 NetlistIntent)
+6  schematic_pinmap       引脚映射(逻辑引脚→真实器件引脚号)
+7  schematic_layout        原理图布局(sheet 摆放 + 标签/局部线)
+8  schematic_materialize   物化 .kicad_sch(round-trip 计数校验)
+9  erc                    ERC 兜底(确定性短路/单脚网 + 可选 kicad-cli ERC)
    —— 布局 ——
-9  layout_partition       分区/板框(功能区 zone)
-10 layout_critical        关键器件约束摆放(晶振靠 MCU、去耦就近、连接器沿边)
-11 layout_general         常规摆放 + 对齐(尺寸感知装箱)
-12 layout_write           兜底(重叠/越界)+ 写 .kicad_pcb
+10 layout_partition       分区/板框(功能区 zone)
+11 layout_critical        关键器件约束摆放(晶振靠 MCU、去耦就近、连接器沿边)
+12 layout_general         常规摆放 + 对齐(尺寸感知装箱)
+13 layout_write           兜底(重叠/越界)+ 写 .kicad_pcb
    —— 布线 ——
-13 route_plan             叠层 + 网络分类(NetClass 线宽/间距/过孔)
-14 route_planes           电源地平面 + 关键网优先
-15 route_signals          常规布线(Freerouting;缺失时降级 deferred)
-16 route_fab              工艺兜底审计(线宽/间距 vs 工艺最小值)
+14 route_plan             叠层 + 网络分类(NetClass 线宽/间距/过孔)
+15 route_planes           电源地平面 + 关键网优先
+16 route_signals          常规布线(Freerouting;默认要求 DSN→SES 且零未连接)
+17 route_fab              工艺兜底审计(线宽/间距 vs 工艺最小值)
    —— 制造 ——
-17 manufacture            DRC 兜底 + 导出 BOM / CPL /(有 kicad-cli 时)Gerber
+18 manufacture            重验网络/焊盘/铜线/DRC + 导出 BOM / CPL / Gerber
 ```
+
+`topology` 冻结的是能力与约束，不是 MCU 品牌分类。未固定主控时，MCU role 使用
+`selection_mode=capability_only`，记录接口数量、存储、性能、功耗、封装和采购约束；
+`selection` 才比较真实候选并选择一个具体器件。只有用户明确写出“必须/固定使用某
+MPN”时才使用 `fixed_exact`。用户只写 STM32/ESP32 等宽泛 family 时，该信息只缩小
+候选范围，具体器件仍由 `selection` 决定；选型后再加载对应 fact sheet、供电、时钟、
+启动脚和 PCB 验证规则。
 
 ### 每步统一形态(`PipelineStepBase`)
 
@@ -478,6 +487,13 @@ reset                schematic_readability  trace_width_current      vias_return
 设置 `KICAD_MCP_HOME` 指向你自己的缓存。`ground_ir(ir)` 可按元件 value + 封装为每个元件
 给出候选 LCSC 器件;管线 B 的选型步也复用它接地 MPN/LCSC。
 
+选型按“可制造性/封装匹配 → JLC Basic → 库存 → 交期 → 价格”排序。可选的
+`DigiKeyProvider` 与 `MouserProvider` 只在配置凭据后启用；DigiKey 支持客户端凭据自动获取
+短期 OAuth token，也可直接提供短期 access token。供应商响应写入本地目录快照缓存；
+没有凭据、API 暂时不可用或没有候选时只形成 evidence gap，不会提前阻塞设计。选型之后的
+`component_prepare` 步会检查 Symbol、Footprint、MPN、封装、HTTPS 数据手册和快照，生成
+schema-v2 的 `<project>_component_release.json`；BOM 与独立项目审查共享这份发布合同。
+
 ---
 
 ## 16. 产物与运行目录
@@ -530,7 +546,7 @@ EricAI 网关,`slow_corpus` 是数十 MB 的 demo 板。**默认门禁必须同�
 
 测试覆盖:领域合同、EDA 适配、真实符号库、KiCad 网表导出与解析、两种板格式的网表读取、验证、
 电路族、配置/工艺表、语料 role、生成编排、Agent(architect/reviewer/coder)、修复、知识库、
-独立审查、接地选型、数据手册闸门与跨器件判据、结构化失败信息与确定性补正,以及 17 步管线的
+独立审查、接地选型、数据手册闸门与跨器件判据、结构化失败信息与确定性补正,以及 18 步管线的
 框架与逐步(topology / selection / connections / pinmap / sch-layout / materialize / erc /
 layout-partition / layout-place / routing / manufacture / 端到端)。真实 KiCad 路径以
 `real_kicad` 标记,需装 KiCad 10 时才跑。
@@ -542,19 +558,23 @@ layout-partition / layout-place / routing / manufacture / 端到端)。真实 Ki
 **已实现:**
 
 - **管线 A**:族内参数化生成、确定性 gate、半自动/自动修复循环。
-- **管线 B**:完整 17 步知识驱动流程(需求→拓扑→选型→原理图→布局→**布线**→制造),
+- **管线 B**:完整 18 步知识驱动流程(需求→拓扑→选型→器件准备→原理图→布局→**布线**→制造),
   每步 LLM 提议 + 确定性兜底,真实符号/封装库与工艺表接地。
 - **Agent**:EricAI 三角色(带 `auto` 回退 / `required` fail-closed 模式)。
 - **知识库**:按 role 的检索(EricAI embedding+reranker / 离线词法回退)。
 - **独立能力**:任意 KiCad 工程审查、本地 JLCPCB 接地选型。
 
-**未来工作:** MCP 对外暴露;更完整的自动布线(现依赖外部 Freerouting)。
+**未来工作:** MCP 对外暴露;增加 Freerouting 之外的布线后端与更完整的 SI / EMC 分析。
 
 **明确的能力边界(务必知晓):**
 
 - 管线 A 的生成仅在 **ATmega328 电路族内**可靠,**不是**通用自然语言→任意电路生成器;
   管线 B 更通用,但仍以真实库覆盖度与工艺兜底为限。
-- **布线**依赖外部 **Freerouting**;缺失时优雅降级为 `deferred`(记录未完成、不阻断)。
+- **正式构建默认强制真实布线**：Freerouting 缺失、DSN/SES 缺失、未连接数非零、PCB
+  没有焊盘网络或铜线，都会阻断；制造步骤会再次复核，未通过时绝不导出 Gerber。
+  只有规划/测试场景可显式设置 `require_freerouting=false` 保留 `deferred` 中间产物。
+- 缺少采购 API / 库存快照只会让 `component_release_ready=false`，不会触发电气设计修复
+  循环；已布线、ERC/DRC 通过的工程仍标记为 `design_complete=true`，采购发布单独提示。
 - 兜底是"防烧板"级的**廉价物理/存在性检查**(引脚/焊盘存在、线宽间距 ≥ 工艺最小值、
   短路/单脚网/重叠/越界),**不替代**完整 DRC / SI / EMC sign-off。
 - 确定性布局是**可制造的 baseline**(尺寸感知装箱,保证无重叠 / 在框内);紧密、美观的
@@ -563,9 +583,9 @@ layout-partition / layout-place / routing / manufacture / 端到端)。真实 Ki
 - 审查是**辅助发现问题**,最终工程判断归人。
 - 知识库降低幻觉但**不替代**确定性验证 / 兜底;硬事实不进向量库。
 - kicad-cli 缺失时 ERC / Gerber 报 `unavailable`(WARNING),确定性 gate / 兜底为权威。
-- **已知局限:** vendored 写入器未嵌入符号引脚几何,因此真实 kicad-cli ERC 可能报未连接
-  引脚——离线流程以**确定性 gate / 兜底为权威**;ERC 干净取决于符号图形嵌入,仅在
-  `real_kicad` 标记下考察其"能运行"。
+- 管线 A 与 B 都嵌入真实 Symbol 图形，并把网络标签放在物理引脚坐标上；参考 3.3 V
+  与 5 V ATmega328 方案在 KiCad 10 实测为 ERC 零错误。不同 KiCad 大版本仍应在目标
+  制造环境重跑 ERC / DRC。
 
 ---
 

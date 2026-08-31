@@ -18,11 +18,15 @@ from ratsnestpro.orchestration.pipeline import (
     SelectionStep,
     Severity,
     TopologyStep,
+    _apply_selection_identity_policy,
     _close_truncated_json,
     _component_symbol_hints,
+    _fixed_mcu_models,
     _ground_selected_parts,
     _grounded_vcap_uf,
     _library_voltage_rating_v,
+    _mcu_capability_requirements,
+    _mcu_family_options,
     _mcu_models,
     _normalize_footprint_for_symbol,
     _normalize_grounded_values,
@@ -35,6 +39,7 @@ from ratsnestpro.orchestration.pipeline import (
     _uncovered_topology_blocks,
 )
 from ratsnestpro.orchestration.pipeline_contracts import (
+    ComponentRoleSpec,
     SelectedPart,
     SelectionPlan,
     TopologyBlock,
@@ -772,6 +777,222 @@ def test_selection_ignores_negated_mcu_and_still_blocks_substitution(
 
 def test_mcu_model_parser_requires_specific_atmega_model() -> None:
     assert _mcu_models("Use RP2040; never substitute ATmega.") == {"rp2040"}
+
+
+def test_mcu_alternatives_are_candidates_not_fixed_identities() -> None:
+    requirement = (
+        "STM32F405RGT6 或 ESP32-C3 都可以，请根据 Wi-Fi、BLE、低功耗和成本选择。"
+    )
+
+    assert _mcu_models(requirement) == {"stm32f405rgt6", "esp32c3"}
+    assert _fixed_mcu_models(requirement) == set()
+
+
+def test_explicit_mcu_constraint_remains_fixed() -> None:
+    assert _fixed_mcu_models("主控必须是 STM32F405RGT6，禁止替换。") == {
+        "stm32f405rgt6"
+    }
+
+
+def test_mcu_capabilities_are_extracted_without_selecting_a_family() -> None:
+    capabilities = _mcu_capability_requirements(
+        "需要 Wi-Fi、BLE、2 路 UART、12 路 GPIO、至少 4 MB Flash，电池低功耗供电。"
+    )
+
+    assert {
+        "mcu_core",
+        "wifi",
+        "bluetooth_le",
+        "uart>=2",
+        "gpio>=12",
+        "flash>=4 MB",
+        "low_power",
+    } <= set(capabilities)
+
+
+def test_topology_clears_unpinned_mcu_identity_from_llm() -> None:
+    fake = FakeLLM([
+        json.dumps({
+            "blocks": [{"name": "mcu", "kind": "mcu"}],
+            "component_roles": [{
+                "role": "mcu",
+                "value": "ESP32-C3",
+                "symbol": "RF_Module:ESP32-C3-WROOM-02",
+                "footprint": "RF_Module:ESP32-C3-WROOM-02",
+                "manufacturer": "Espressif",
+                "exact_mpn": "ESP32-C3-WROOM-02",
+            }],
+            "rails": ["3V3"],
+            "ground_net": "GND",
+        })
+    ])
+
+    plan, used_llm = TopologyStep().propose(
+        PipelineState(
+            requirement_text="需要 Wi-Fi、BLE、2 路 UART 和低功耗，由系统选择主控。"
+        ),
+        PipelineContext(mode=LlmMode.AUTO, client=fake),
+        knowledge="",
+    )
+
+    role = plan.component_roles[0]
+    assert used_llm
+    assert role.selection_mode == "capability_only"
+    assert role.exact_mpn == role.manufacturer == role.symbol == role.footprint == ""
+    assert {"wifi", "bluetooth_le", "uart>=2", "low_power"} <= set(
+        role.required_capabilities
+    )
+
+
+def test_topology_preserves_only_user_fixed_mcu_identity() -> None:
+    fake = FakeLLM([
+        json.dumps({
+            "blocks": [{"name": "mcu", "kind": "mcu"}],
+            "component_roles": [{"role": "mcu", "exact_mpn": "ESP32-C3"}],
+            "rails": ["3V3"],
+            "ground_net": "GND",
+        })
+    ])
+
+    plan, _used_llm = TopologyStep().propose(
+        PipelineState(requirement_text="主控必须是 STM32F405RGT6，禁止替换。"),
+        PipelineContext(mode=LlmMode.AUTO, client=fake),
+        knowledge="",
+    )
+
+    role = plan.component_roles[0]
+    assert role.selection_mode == "fixed_exact"
+    assert role.exact_mpn == "STM32F405RGT6"
+
+
+def test_broad_mcu_family_is_a_selection_option_not_an_exact_mpn() -> None:
+    assert _fixed_mcu_models("主控使用 STM32，由系统选择具体型号。") == set()
+    assert _mcu_family_options("STM32 或 ESP32 都可以。") == ["STM32", "ESP32"]
+    assert "mcu_family_any_of=STM32|ESP32" in _mcu_capability_requirements(
+        "STM32 或 ESP32 都可以，要求低功耗。"
+    )
+
+
+def test_topology_keeps_broad_family_in_capabilities_only() -> None:
+    fake = FakeLLM([
+        json.dumps({
+            "blocks": [{"name": "mcu", "kind": "mcu"}],
+            "component_roles": [{"role": "mcu", "exact_mpn": "STM32"}],
+            "rails": ["3V3"],
+            "ground_net": "GND",
+        })
+    ])
+
+    plan, _used_llm = TopologyStep().propose(
+        PipelineState(requirement_text="主控使用 STM32，由系统选择具体型号。"),
+        PipelineContext(mode=LlmMode.AUTO, client=fake),
+        knowledge="",
+    )
+
+    role = plan.component_roles[0]
+    assert role.selection_mode == "capability_only"
+    assert role.exact_mpn == ""
+    assert "mcu_family_any_of=STM32" in role.required_capabilities
+
+
+def test_selection_does_not_require_every_optional_mcu_family(monkeypatch) -> None:
+    monkeypatch.delenv("KICAD_SYMBOL_DIR", raising=False)
+    monkeypatch.delenv("KICAD_FOOTPRINT_DIR", raising=False)
+    state = PipelineState(
+        requirement_text="STM32F405RGT6 或 ESP32-C3 都可以，根据功能选择一个。"
+    )
+    plan = SelectionPlan(parts=[
+        SelectedPart(
+            ref="U1",
+            symbol="RF_Module:ESP32-C3-WROOM-02",
+            value="ESP32-C3-WROOM-02",
+            role="mcu",
+        )
+    ])
+
+    checks = SelectionStep().check(state, plan)
+
+    assert all(check.name != "requested_mcu_selected" for check in checks)
+
+
+def test_family_metadata_is_attached_only_after_capability_selection() -> None:
+    topology = TopologyPlan(
+        blocks=[TopologyBlock(name="mcu", kind="mcu")],
+        component_roles=[
+            ComponentRoleSpec(
+                role="mcu",
+                selection_mode="capability_only",
+                required_capabilities=["wifi", "bluetooth_le", "low_power"],
+            )
+        ],
+        rails=["3V3"],
+    )
+    plan = SelectionPlan(
+        parts=[
+            SelectedPart(
+                ref="U1",
+                symbol="RF_Module:ESP32-C3-WROOM-02",
+                value="ESP32-C3-WROOM-02",
+                role="mcu",
+            )
+        ],
+        rationale="best grounded capability match",
+    )
+
+    _apply_selection_identity_policy(plan, "需要 Wi-Fi、BLE 和低功耗。", topology)
+
+    part = plan.parts[0]
+    assert part.identity_mode == "capability_only"
+    assert part.device_family == "ESP32"
+    assert part.validation_profile == "ESP32-C3"
+
+
+def test_family_option_is_stamped_as_variant_after_selection() -> None:
+    plan = SelectionPlan(parts=[
+        SelectedPart(
+            ref="U1",
+            symbol="RF_Module:ESP32-C3-WROOM-02",
+            value="ESP32-C3-WROOM-02",
+            role="mcu",
+        )
+    ])
+
+    _apply_selection_identity_policy(plan, "STM32 或 ESP32 都可以。", None)
+
+    assert plan.parts[0].identity_mode == "family_variant"
+    assert plan.parts[0].requested_identity == "STM32 | ESP32"
+
+
+def test_family_constraint_is_checked_after_selection() -> None:
+    state = PipelineState(requirement_text="主控使用 STM32，由系统选择具体型号。")
+    wrong = SelectionPlan(parts=[
+        SelectedPart(
+            ref="U1",
+            symbol="RF_Module:ESP32-C3-WROOM-02",
+            value="ESP32-C3-WROOM-02",
+            role="mcu",
+        )
+    ])
+    right = SelectionPlan(parts=[
+        SelectedPart(
+            ref="U1",
+            symbol="MCU_ST_STM32F4:STM32F405RGT6",
+            value="STM32F405RGT6",
+            role="mcu",
+        )
+    ])
+
+    wrong_check = next(
+        check for check in SelectionStep().check(state, wrong)
+        if check.name == "requested_mcu_family_selected"
+    )
+    right_check = next(
+        check for check in SelectionStep().check(state, right)
+        if check.name == "requested_mcu_family_selected"
+    )
+
+    assert not wrong_check.ok
+    assert right_check.ok
 
 
 def test_mcu_model_parser_ignores_run_and_project_names() -> None:

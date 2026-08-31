@@ -62,6 +62,10 @@ _EXPLICIT: dict[str, str] = {
     "kicad_cli_erc": "tool_unavailable",
     "datasheet_connection": "erc_violation",
     "mcu_supply_decoupling_not_excessive": "erc_violation",
+    "prepared_components_accounted": "missing_component",
+    "component_release_ready": "missing_component",
+    "external_assets_validated": "transient_external_failure",
+    "catalog_evidence_available": "transient_external_failure",
 }
 
 
@@ -180,7 +184,9 @@ CLASS_REPAIR_DIRECTIVE: dict[str, str] = {
     "pin_conflict": "Reassign each physical pin to at most one logical net.",
     "erc_violation": "Correct only the flagged schematic connectivity objects.",
     "tool_unavailable": "Record the capability gap; do not invent a tool result.",
-    "transient_external_failure": "Retry the same bounded operation without changing design intent.",
+    "transient_external_failure": (
+        "Retry the same bounded operation without changing design intent."
+    ),
     "routing_congestion": "Adjust placement or routing while preserving critical constraints.",
     "manufacturing_violation": "Correct the flagged geometry to the declared fab rules.",
     "harness_defect": "Stop and record a Harness capability gap.",
@@ -210,4 +216,3 @@ __all__ = [
     "failure_class_for",
     "repair_directives",
 ]
-

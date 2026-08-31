@@ -95,6 +95,11 @@ def test_new_layout_reads_the_names_off_the_pads() -> None:
     assert [n["name"] for n in nets] == ["GND", "VDD33"]
 
 
+@pytest.mark.parametrize("text", [_OLD_LAYOUT, _NEW_LAYOUT])
+def test_pad_net_names_reads_real_pad_assignments_in_both_layouts(text: str) -> None:
+    assert _board(text).pad_net_names() == ["GND", "VDD33"]
+
+
 def test_segment_net_is_not_mistaken_for_a_net_name() -> None:
     """``(net 1)`` on a segment is an index reference, not a declaration.
 

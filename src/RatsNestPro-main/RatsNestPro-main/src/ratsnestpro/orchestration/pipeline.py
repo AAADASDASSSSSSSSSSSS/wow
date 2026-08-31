@@ -15,8 +15,8 @@ Design stance:
 * ``auto`` uses the LLM and falls back to the deterministic path on failure.
 * ``required`` must use the LLM; a failure or invalid output fails closed.
 
-This module provides the framework plus the first two concrete steps
-(requirements, topology). Later tasks add the remaining steps; each one
+This module provides the framework plus the concrete steps
+(requirements, topology, selection, component preparation). Each one
 subclasses :class:`PipelineStepBase` and is registered in :data:`ALL_STEPS`.
 """
 
@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel
 
@@ -42,13 +43,17 @@ from ratsnestpro.domain.contracts import ContractModel, RequirementSpec, Severit
 from ratsnestpro.eda import factbrief, factclaim, factgate, footprints, grounding, symbols
 from ratsnestpro.eda import factsheet as factsheet_module
 from ratsnestpro.eda.adapter import kicad_cli_available, run_erc
-from ratsnestpro.eda.factsheet import FactSheetBase
+from ratsnestpro.eda.factsheet import DeviceClass, FactSheetBase, all_fact_sheets
 from ratsnestpro.eda.materialize import materialize_pinmapped
 from ratsnestpro.knowledge import KnowledgeBase, build_default_kb
 from ratsnestpro.orchestration import check_classes
 from ratsnestpro.orchestration.pipeline_contracts import (
+    COMPONENT_RELEASE_MANIFEST_SCHEMA,
+    COMPONENT_RELEASE_POLICY,
     BoardPartition,
     BoardZone,
+    ComponentPrepareResult,
+    ComponentRoleSpec,
     ErcSummary,
     FabAudit,
     LogicalPin,
@@ -65,6 +70,7 @@ from ratsnestpro.orchestration.pipeline_contracts import (
     PcbWriteResult,
     PinMapPlan,
     PlanePlan,
+    PreparedComponent,
     RoutePlan,
     RouteResult,
     SchLayoutPlan,
@@ -87,6 +93,7 @@ class PipelineStep(StrEnum):
     REQUIREMENTS = "requirements"
     TOPOLOGY = "topology"
     SELECTION = "selection"
+    COMPONENT_PREPARE = "component_prepare"
     SCH_CONNECTIONS = "schematic_connections"
     SCH_PINMAP = "schematic_pinmap"
     SCH_LAYOUT = "schematic_layout"
@@ -105,6 +112,7 @@ class PipelineStep(StrEnum):
 
 # Canonical order (StrEnum preserves definition order).
 CANONICAL_ORDER: list[PipelineStep] = list(PipelineStep)
+PIPELINE_TOTAL_STEPS = len(CANONICAL_ORDER)
 _ORDER_INDEX: dict[PipelineStep, int] = {s: i for i, s in enumerate(CANONICAL_ORDER)}
 
 
@@ -235,7 +243,10 @@ class PipelineContext:
     # would erase exactly that distinction.
     fact_brief: str = ""
     repair_attempts: int = 0  # how many times a blocked LLM step may re-propose (opt-in)
-    require_freerouting: bool = False  # fail closed when real signal routing is incomplete
+    # Safe default for every caller, including the direct Python API. Planning
+    # and diagnostic callers may opt out explicitly, but an omitted flag must
+    # never turn an unrouted placement into a successful build.
+    require_freerouting: bool = True
     capture_step_errors: bool = False
     # Diagnostic only: keep running past a blocked step to see how far the flow
     # reaches. Artifacts produced after a block are NOT trustworthy.
@@ -902,13 +913,35 @@ class TopologyStep(PipelineStepBase):
             ]
             return TopologyPlan(
                 blocks=blocks, rails=rails, ground_net="GND",
+                component_roles=[
+                    ComponentRoleSpec(
+                        role="power_input", description="input protection and connector"
+                    ),
+                    ComponentRoleSpec(role="regulator", description=f"regulator for {rail} V rail"),
+                    ComponentRoleSpec(role="mcu", description="required microcontroller"),
+                    ComponentRoleSpec(
+                        role="oscillator", description="clock source and load capacitors"
+                    ),
+                    ComponentRoleSpec(role="reset", description="reset network"),
+                    ComponentRoleSpec(role="headers", description="user-facing headers"),
+                ],
                 rationale="deterministic baseline topology",
             )
 
         system = (
             "You design a PCB block-level topology. Return JSON with blocks[] "
-            "(name, kind, description), rails[] (supply rail names), ground_net, "
-            "rationale. Use the provided design knowledge. "
+            "(name, kind, description), component_roles[] (role, description, "
+            "value, package, selection_mode, required_capabilities, selection_basis, "
+            "quantity, required, min_stock, max_price, max_lead_days, "
+            "hard_constraints, soft_preferences), rails[] (supply rail names), "
+            "ground_net, rationale. Freeze functional roles and hard constraints "
+            "before any manufacturer part number is selected. Use "
+            "selection_mode='capability_only' unless the user explicitly fixed an "
+            "exact order code. Do not choose a manufacturer, symbol, footprint, MCU "
+            "family, or exact MPN for a capability-only role. Record interfaces, "
+            "memory, performance, power, package and lifecycle needs in "
+            "required_capabilities/hard_constraints so the next step can compare "
+            "real candidates. Use the provided design knowledge. "
             f"{_FACT_AUTHORITY}"
         )
         user = (
@@ -916,9 +949,11 @@ class TopologyStep(PipelineStepBase):
             f"{_facts_block(ctx)}"
             f"Knowledge:\n{knowledge}"
         )
-        return propose_structured(
+        plan, used_llm = propose_structured(
             ctx, model=TopologyPlan, system=system, user=user, fallback=fallback
         )
+        _normalize_topology_identity(plan, state.requirement_text)
+        return plan, used_llm
 
     def check(self, state: PipelineState, artifact: BaseModel) -> list[CheckResult]:
         assert isinstance(artifact, TopologyPlan)
@@ -942,25 +977,118 @@ class TopologyStep(PipelineStepBase):
         return f"{len(artifact.blocks)} blocks, rails={artifact.rails}"
 
 
-def _ground_mpns(parts: list[SelectedPart]) -> None:
-    """Fill mpn/lcsc from the real JLCPCB cache. Never fabricate: leave empty
-    when the cache is unavailable or has no match."""
+_CATALOG_DECISION_RE = re.compile(
+    r"candidate for\s+([^:;]+):\s*MPN=([^;]+)",
+    re.IGNORECASE,
+)
+
+
+def _user_selected_mpn(requirement: str, value: str) -> str:
+    wanted = value.strip().casefold()
+    for query, mpn in _CATALOG_DECISION_RE.findall(requirement):
+        if query.strip().casefold() == wanted:
+            return mpn.strip()
+    return ""
+
+
+def _ground_mpns(
+    parts: list[SelectedPart],
+    requirement: str = "",
+    component_roles: list[ComponentRoleSpec] | None = None,
+) -> list[str]:
+    """Fill procurement identity from configured providers without fabrication."""
     try:
+        from ratsnestpro.parts import PartConstraint, ProcurementContext
         from ratsnestpro.parts.selector import PartSelector
 
         sel = PartSelector()
-        if not sel.available():
-            return
+        issues: list[str] = []
+        role_specs = {
+            spec.role.strip().casefold(): spec
+            for spec in component_roles or []
+            if spec.role.strip()
+        }
         for p in parts:
             if p.role == "mounting_hole" or not p.value:
                 continue
-            cands = sel.suggest(p.value, p.footprint, limit=1)
+            spec = role_specs.get(p.role.strip().casefold())
+            requested_mpn = _user_selected_mpn(requirement, p.value)
+            exact_mpn = requested_mpn or (spec.exact_mpn if spec else "")
+            quantity = max(1, p.quantity, spec.quantity if spec else 1)
+            constraint = PartConstraint(
+                role=p.role,
+                value=(spec.value if spec and spec.value else p.value),
+                footprint=(spec.footprint if spec and spec.footprint else p.footprint),
+                package=(spec.package if spec else ""),
+                manufacturer=(spec.manufacturer if spec else ""),
+                exact_mpn=exact_mpn,
+                min_stock=(spec.min_stock if spec else 0),
+                max_price=(spec.max_price if spec else None),
+                max_lead_days=(spec.max_lead_days if spec else None),
+                required=(spec.required if spec else True),
+                quantity=quantity,
+                hard_constraints=tuple(spec.hard_constraints if spec else ()),
+                soft_preferences=tuple(spec.soft_preferences if spec else ()),
+            )
+            context = ProcurementContext(quantity=quantity)
+            if exact_mpn:
+                cands, provider_issues = sel.search_catalog(
+                    constraint,
+                    context=context,
+                    limit=10,
+                )
+                cands = [
+                    candidate
+                    for candidate in cands
+                    if candidate.mpn.casefold() == exact_mpn.casefold()
+                ]
+            else:
+                cands, provider_issues = sel.search_catalog(
+                    constraint,
+                    context=context,
+                    limit=3,
+                )
+            issues.extend(
+                f"{issue.provider}:{issue.code}:{issue.message}"
+                for issue in provider_issues
+            )
             if cands:
-                p.mpn = cands[0].mpn
-                p.lcsc = cands[0].lcsc
+                candidate = cands[0]
+                p.mpn = candidate.mpn
+                p.lcsc = candidate.lcsc
+                p.catalog_provider = candidate.provider
+                p.provider_part_id = candidate.provider_part_id
+                p.manufacturer = candidate.manufacturer
+                p.package_match = candidate.package_match
+                p.asset_status = candidate.asset_status
+                p.lifecycle = candidate.lifecycle
+                p.rohs = candidate.rohs
+                p.lead_days = candidate.lead_days
+                p.unit_price = candidate.price
+                p.price_currency = candidate.currency
+                p.catalog_snapshot_id = candidate.snapshot_id
+                p.datasheet = candidate.datasheet
+                p.catalog_source_url = candidate.source_url
+                p.constraint_gaps = list(candidate.constraint_gaps)
+                p.selection_confidence = (
+                    0.95
+                    if candidate.package_match == "exact" and not candidate.constraint_gaps
+                    else 0.85
+                    if candidate.package_match == "compatible" and not candidate.constraint_gaps
+                    else 0.55
+                )
+                p.selection_reason = (
+                    "manufacturability/package evidence first; then JLC/basic, "
+                    "provider preference, stock, lead time, and price"
+                )
+                issues.extend(
+                    f"selection:constraint_unverified:{p.ref}:{gap}"
+                    for gap in candidate.constraint_gaps
+                )
+        return issues
     except Exception:
-        # Grounding is best-effort; absence of a cache must not break the flow.
-        return
+        # Provider failures are explicit evidence gaps, not design crashes.
+        return ["catalog:query_failed:provider query failed"]
 
 
 _FREQ_RE = re.compile(r"(\d+(?:\.\d+)?)\s*MHz", re.IGNORECASE)
@@ -999,6 +1127,220 @@ _MCU_POSITIVE_RE = re.compile(
 _MODEL_LIKE_TOKEN_RE = re.compile(
     r"\b[A-Za-z][A-Za-z0-9_.-]{2,}\d[A-Za-z0-9_.-]*\b"
 )
+_FIXED_IDENTITY_CUE_RE = re.compile(
+    r"(?:必须(?:使用|采用|选用|是|为)?|固定(?:使用|采用|选用|是|为|主控)?|"
+    r"指定(?:使用|采用|选用|是|为)?|不得替换|禁止替换|"
+    r"\bmust\s+(?:use|be)\b|\bshall\s+(?:use|be)\b|"
+    r"\buse\s+exactly\b|\bexact\s+(?:part|mpn)\b|"
+    r"\bno\s+substitution\b|\bdo\s+not\s+substitute\b|"
+    r"\buse\b|\busing\b|\bdesign\b|使用|采用|选用)",
+    re.IGNORECASE,
+)
+_IDENTITY_ALTERNATIVE_RE = re.compile(
+    r"(?:\bor\b|\beither\b|或者|或是|均可|都可以|任选|二选一)",
+    re.IGNORECASE,
+)
+_IDENTITY_EXAMPLE_RE = re.compile(
+    r"(?:\be\.g\.\b|\bfor\s+example\b|\bsuch\s+as\b|\blike\b|比如|例如|类似|参考)",
+    re.IGNORECASE,
+)
+_GENERIC_MCU_FAMILY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "STM32",
+        re.compile(r"(?<![A-Za-z0-9])STM32(?![A-Za-z0-9-])", re.IGNORECASE),
+    ),
+    (
+        "ESP32",
+        re.compile(r"(?<![A-Za-z0-9])ESP32(?![A-Za-z0-9-])", re.IGNORECASE),
+    ),
+)
+_NON_MCU_IDENTITY_PREFIXES = (
+    "usb", "uart", "usart", "spi", "i2c", "i2s", "can", "gpio", "adc",
+    "dac", "pwm", "sdio", "sdmmc", "qspi", "rmii", "jtag", "swd", "wifi",
+)
+
+_MCU_CAPABILITY_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("wifi", ("wi-fi", "wifi", "无线局域网")),
+    ("bluetooth_le", ("bluetooth le", "ble", "蓝牙低功耗", "低功耗蓝牙")),
+    ("bluetooth", ("bluetooth", "蓝牙")),
+    ("ethernet_mac", ("ethernet", "以太网", "rmii", "rgmii")),
+    ("can_fd", ("can-fd", "can fd", "canfd")),
+    ("can", ("can总线", "can bus", "can接口")),
+    ("usb_host", ("usb host", "usb主机")),
+    ("usb_device", ("usb device", "usb设备")),
+    ("sdio", ("sdio", "sdmmc", "sdhc")),
+    ("ota", ("ota", "空中升级", "远程升级")),
+    ("low_power", ("low power", "low-power", "低功耗", "电池供电")),
+    ("hardware_crypto", ("hardware crypto", "硬件加密", "secure boot", "安全启动")),
+)
+
+
+def _intent_clause(text: str, start: int) -> str:
+    separators = ".!?。！？;；\n"
+    begin = max((text.rfind(separator, 0, start) for separator in separators), default=-1) + 1
+    ends = [text.find(separator, start) for separator in separators]
+    end = min((position for position in ends if position >= 0), default=len(text))
+    return text[begin:end]
+
+
+def _looks_like_mcu_order_code(token: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", token.casefold())
+    if normalized in {"stm32", "esp32"}:
+        return False
+    if len(normalized) < 5 or not any(char.isdigit() for char in normalized):
+        return False
+    if normalized.startswith(_NON_MCU_IDENTITY_PREFIXES):
+        return False
+    if _MCU_MODEL_RE.fullmatch(token):
+        return True
+    return bool(_library_mcu_models(token)) or normalized.startswith(
+        ("atsam", "same", "samd", "lpc", "efm", "gd32", "msp", "ra", "psoc", "pic")
+    )
+
+
+def _mcu_family_options(text: str) -> list[str]:
+    """Broad MCU families offered or required by the user.
+
+    These constrain the later selection candidate set but never pretend that a
+    family label such as ``STM32`` is an exact manufacturer order code.
+    """
+    source = _original_requirement(text)
+    options: list[str] = []
+    for family, pattern in _GENERIC_MCU_FAMILY_PATTERNS:
+        for match in pattern.finditer(source):
+            if _model_mention_is_negated(source, match.start()):
+                continue
+            clause = _intent_clause(source, match.start())
+            if _IDENTITY_EXAMPLE_RE.search(clause):
+                continue
+            options.append(family)
+            break
+    return list(dict.fromkeys(options))
+
+
+def _fixed_mcu_tokens(text: str) -> tuple[str, ...]:
+    """Exact MCU identities fixed by user intent, not merely mentioned.
+
+    A list such as "STM32 or ESP32 are both acceptable" deliberately returns
+    nothing: those names are candidate preferences, not two mandatory MCUs.
+    """
+    source = _original_requirement(text)
+    matches = [
+        match for match in _MODEL_LIKE_TOKEN_RE.finditer(source)
+        if _looks_like_mcu_order_code(match.group(0))
+        and not _model_mention_is_negated(source, match.start())
+    ]
+    fixed: list[str] = []
+    for match in matches:
+        clause = _intent_clause(source, match.start())
+        clause_models = [
+            candidate.group(0)
+            for candidate in _MODEL_LIKE_TOKEN_RE.finditer(clause)
+            if _looks_like_mcu_order_code(candidate.group(0))
+        ]
+        if len(clause_models) > 1 and _IDENTITY_ALTERNATIVE_RE.search(clause):
+            continue
+        sole_specific_model = (
+            len(matches) == 1
+            and not _IDENTITY_ALTERNATIVE_RE.search(clause)
+            and not _IDENTITY_EXAMPLE_RE.search(clause)
+        )
+        if _FIXED_IDENTITY_CUE_RE.search(clause) or sole_specific_model:
+            fixed.append(match.group(0))
+    return tuple(dict.fromkeys(fixed))
+
+
+def _fixed_mcu_models(text: str) -> set[str]:
+    return {
+        re.sub(r"[^a-z0-9]", "", token.casefold())
+        for token in _fixed_mcu_tokens(text)
+    }
+
+
+def _mcu_capability_requirements(text: str) -> list[str]:
+    """Normalize user-facing MCU needs without choosing a device family."""
+    source = _original_requirement(text)
+    lowered = source.casefold()
+    capabilities = ["mcu_core"]
+    for capability, keywords in _MCU_CAPABILITY_KEYWORDS:
+        if any(keyword in lowered for keyword in keywords):
+            capabilities.append(capability)
+    for count, interface in re.findall(
+        r"(\d+)\s*(?:路|个|x\s*)?\s*(uart|usart|spi|i2c|gpio|adc|dac|pwm)s?\b",
+        lowered,
+    ):
+        capabilities.append(f"{interface}>={count}")
+    flash_patterns = (
+        r"(?:flash|闪存)[^\n。.;；]{0,40}?(?:至少|>=|不低于)\s*(\d+(?:\.\d+)?)\s*(kb|mb|gb|kbit|mbit|gbit)",
+        r"(?:至少|>=|不低于)\s*(\d+(?:\.\d+)?)\s*(kb|mb|gb|kbit|mbit|gbit)[^\n。.;；]{0,20}?(?:flash|闪存)",
+    )
+    for pattern in flash_patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            capabilities.append(f"flash>={match.group(1)} {match.group(2).upper()}")
+            break
+    family_options = _mcu_family_options(source)
+    if family_options:
+        capabilities.append(f"mcu_family_any_of={'|'.join(family_options)}")
+    return list(dict.fromkeys(capabilities))
+
+
+def _identity_is_explicitly_fixed(requirement: str, identity: str) -> bool:
+    if not identity:
+        return False
+    source = _original_requirement(requirement)
+    match = re.search(re.escape(identity), source, re.IGNORECASE)
+    if match is None:
+        return False
+    clause = _intent_clause(source, match.start())
+    return bool(
+        _FIXED_IDENTITY_CUE_RE.search(clause)
+        and not _IDENTITY_ALTERNATIVE_RE.search(clause)
+    )
+
+
+def _normalize_topology_identity(plan: TopologyPlan, requirement: str) -> None:
+    """Keep topology procurement-neutral unless the user fixed an identity."""
+    fixed_mcus = _fixed_mcu_tokens(requirement)
+    mcu_capabilities = _mcu_capability_requirements(requirement)
+    for role in plan.component_roles:
+        role_name = role.role.strip().casefold()
+        catalog_choice = _user_selected_mpn(requirement, role.value)
+        if role_name in {"mcu", "microcontroller", "soc", "controller"}:
+            role.required_capabilities = list(dict.fromkeys([
+                *role.required_capabilities,
+                *mcu_capabilities,
+            ]))
+            if len(fixed_mcus) == 1:
+                role.selection_mode = "fixed_exact"
+                role.exact_mpn = fixed_mcus[0]
+                role.selection_basis = "exact MCU identity fixed by the user"
+                continue
+            role.selection_mode = "capability_only"
+            role.exact_mpn = ""
+            role.manufacturer = ""
+            role.symbol = ""
+            role.footprint = ""
+            role.value = ""
+            role.selection_basis = (
+                "choose the MCU/SoC in the selection step from frozen capabilities"
+            )
+            continue
+        fixed_identity = catalog_choice or (
+            role.exact_mpn
+            if _identity_is_explicitly_fixed(requirement, role.exact_mpn)
+            else ""
+        )
+        if fixed_identity:
+            role.selection_mode = "fixed_exact"
+            role.exact_mpn = fixed_identity
+            role.selection_basis = "exact component identity fixed by the user"
+        else:
+            role.selection_mode = "capability_only"
+            role.exact_mpn = ""
+            role.manufacturer = ""
+            role.symbol = ""
+            role.footprint = ""
 
 
 _ARCHITECT_EVIDENCE_MARKER = "GROUNDED ARCHITECT EVIDENCE"
@@ -1116,6 +1458,51 @@ def _requested_mcu_symbols(requirement: str) -> list[dict[str, str]]:
                 "footprint": props.get("Footprint", ""),
             })
     return matches[:20]
+
+
+def _capability_mcu_symbols() -> list[dict[str, str]]:
+    """Grounded, known MCU candidates for a capability-driven selection.
+
+    Families appear here only as candidate metadata after the requirement has
+    been normalized. They are never used to route or classify the request.
+    """
+    try:
+        index = grounding.symbol_index()
+    except Exception:
+        return []
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for sheet in all_fact_sheets():
+        if DeviceClass(sheet.device_class) is not DeviceClass.MCU:
+            continue
+        keys = {
+            re.sub(r"[^a-z0-9]", "", key.casefold())
+            for key in sheet.match_keys()
+            if key
+        }
+        for lib_id in index:
+            if not lib_id.partition(":")[0].upper().startswith("MCU_"):
+                continue
+            symbol_name = re.sub(
+                r"[^a-z0-9]", "", lib_id.partition(":")[2].casefold()
+            )
+            if not any(
+                key == symbol_name or _mcu_model_matches(key, symbol_name)
+                for key in keys
+            ):
+                continue
+            if lib_id in seen:
+                continue
+            seen.add(lib_id)
+            properties = symbols.symbol_properties(lib_id)
+            candidates.append({
+                "device": sheet.device,
+                "family_metadata": sheet.family,
+                "symbol": lib_id,
+                "footprint": properties.get("Footprint", ""),
+                "datasheet": sheet.source.url,
+            })
+    return candidates[:24]
 
 
 _LIBRARY_HINT_TOKEN_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+_.-]{2,}\b")
@@ -1997,7 +2384,8 @@ def _ground_selected_parts(
     parts: list[SelectedPart],
     requirement: str,
     fixes: list[str] | None = None,
-) -> None:
+    component_roles: list[ComponentRoleSpec] | None = None,
+) -> list[str]:
     """Ground selected parts to installed libraries and trusted catalog data.
 
     ``fixes`` collects the corrections that changed an electrical decision, for
@@ -2054,7 +2442,31 @@ def _ground_selected_parts(
     for part in parts:
         part.mpn = ""
         part.lcsc = ""
-    _ground_mpns(parts)
+        part.catalog_provider = ""
+        part.provider_part_id = ""
+        part.manufacturer = ""
+        part.package_match = "unknown"
+        part.asset_status = "unverified"
+        part.lifecycle = ""
+        part.rohs = ""
+        part.lead_days = None
+        part.unit_price = 0.0
+        part.price_currency = "CNY"
+        part.catalog_snapshot_id = ""
+        part.selection_confidence = 0.0
+        part.selection_reason = ""
+        part.datasheet = ""
+        part.catalog_source_url = ""
+        part.constraint_gaps = []
+    try:
+        issues = _ground_mpns(parts, requirement, component_roles)
+    except TypeError as exc:
+        # Keep compatibility with integrations that monkeypatch the legacy
+        # one-argument grounding hook.
+        if "positional argument" not in str(exc):
+            raise
+        issues = _ground_mpns(parts)
+    return list(issues or [])
 
 
 def _apply_selection_patch(
@@ -2082,7 +2494,56 @@ def _apply_selection_patch(
     return SelectionPlan(
         parts=parts,
         rationale=patch.rationale or plan.rationale,
+        catalog_issues=list(plan.catalog_issues),
     )
+
+
+def _apply_selection_identity_policy(
+    plan: SelectionPlan,
+    requirement: str,
+    topology: TopologyPlan | None,
+) -> None:
+    """Stamp the identity policy decided before catalog grounding.
+
+    Repair proposals are LLM deltas and may omit policy metadata, so the same
+    deterministic stamp is applied after both initial selection and repair.
+    """
+    fixed_tokens = list(_fixed_mcu_tokens(requirement))
+    family_options = _mcu_family_options(requirement)
+    capabilities = _mcu_capability_requirements(requirement)
+    if topology is not None:
+        capabilities = next(
+            (
+                role.required_capabilities
+                for role in topology.component_roles
+                if role.role.strip().casefold()
+                in {"mcu", "microcontroller", "soc", "controller"}
+            ),
+            capabilities,
+        )
+    for part in plan.parts:
+        if part.role.strip().casefold() not in {
+            "mcu", "microcontroller", "soc", "controller"
+        }:
+            continue
+        if len(fixed_tokens) == 1:
+            part.identity_mode = "fixed_exact"
+            part.requested_identity = fixed_tokens[0][:200]
+        elif family_options:
+            part.identity_mode = "family_variant"
+            part.requested_identity = " | ".join(family_options)[:200]
+        else:
+            part.identity_mode = "capability_only"
+            part.requested_identity = ", ".join(capabilities)[:200]
+        selected_sheet = factsheet_module.fact_sheet(
+            " ".join((part.mpn, part.value, part.symbol)),
+            device_class=DeviceClass.MCU,
+        )
+        if selected_sheet is not None:
+            part.device_family = selected_sheet.family
+            part.validation_profile = selected_sheet.device
+        if not part.selection_reason:
+            part.selection_reason = plan.rationale[:1_000]
 
 
 class SelectionStep(PipelineStepBase):
@@ -2104,7 +2565,23 @@ class SelectionStep(PipelineStepBase):
         supply_range and clock_external arrive BEFORE the choice rather than as a
         ``datasheet_limits`` rejection afterwards.
         """
-        return factbrief.sheets_mentioned(state.requirement_text) or None
+        mentioned = factbrief.sheets_mentioned(state.requirement_text)
+        if _fixed_mcu_models(state.requirement_text):
+            return mentioned or None
+        topology = state.artifact(PipelineStep.TOPOLOGY)
+        capability_mcu_role = isinstance(topology, TopologyPlan) and any(
+            role.role.strip().casefold() in {"mcu", "microcontroller", "soc", "controller"}
+            and role.selection_mode == "capability_only"
+            for role in topology.component_roles
+        )
+        if not capability_mcu_role:
+            return mentioned or None
+        candidate_sheets = [
+            ("", sheet)
+            for sheet in all_fact_sheets()
+            if DeviceClass(sheet.device_class) is DeviceClass.MCU
+        ]
+        return factbrief.dedupe([*mentioned, *candidate_sheets]) or None
 
     def propose(
         self, state: PipelineState, ctx: PipelineContext, knowledge: str
@@ -2121,23 +2598,30 @@ class SelectionStep(PipelineStepBase):
             """
             return SelectionPlan(parts=[], rationale="no proposal: no usable LLM output")
 
-        requested_mcus = sorted(_mcu_models(state.requirement_text))
+        fixed_mcus = sorted(_fixed_mcu_models(state.requirement_text))
+        fixed_mcu_tokens = list(_fixed_mcu_tokens(state.requirement_text))
         needs_llm_library_hints = (
             ctx.mode != LlmMode.OFFLINE
             and ctx.client is not None
             and config.symbol_dir() is not None
         )
         exact_mcu_symbols = (
-            _requested_mcu_symbols(state.requirement_text)
+            _requested_mcu_symbols(" ".join(fixed_mcu_tokens))
             if needs_llm_library_hints
             else []
         )
+        capability_mcu_symbols = (
+            _capability_mcu_symbols()
+            if needs_llm_library_hints and not fixed_mcus
+            else []
+        )
+        mcu_symbol_candidates = exact_mcu_symbols or capability_mcu_symbols
         mcu_power_pin_counts = [
             {
                 "symbol": candidate["symbol"],
                 "counts": _symbol_power_pin_counts(candidate["symbol"]),
             }
-            for candidate in exact_mcu_symbols
+            for candidate in mcu_symbol_candidates
         ]
         component_hints = (
             _component_symbol_hints(state.requirement_text)
@@ -2150,16 +2634,41 @@ class SelectionStep(PipelineStepBase):
             if isinstance(topology, TopologyPlan)
             else []
         )
+        role_specs = (
+            [role.model_dump() for role in topology.component_roles]
+            if isinstance(topology, TopologyPlan)
+            else []
+        )
+        mcu_capabilities = next(
+            (
+                role.required_capabilities
+                for role in topology.component_roles
+                if role.role.strip().casefold()
+                in {"mcu", "microcontroller", "soc", "controller"}
+            ),
+            _mcu_capability_requirements(state.requirement_text),
+        ) if isinstance(topology, TopologyPlan) else _mcu_capability_requirements(
+            state.requirement_text
+        )
         system = (
             "You choose real components for the design. Return JSON with parts[] "
-            "(ref, symbol as 'Lib:Name', value, footprint as 'Lib:Name', role) and "
-            "rationale. Use only real KiCad symbols/footprints; do not invent MPNs. "
+            "(ref, symbol as 'Lib:Name', value, footprint as 'Lib:Name', role, "
+            "identity_mode, requested_identity, selection_reason) and rationale. "
+            "Use only real KiCad symbols/footprints; do not invent MPNs. "
+            "For a capability_only MCU role, compare candidates against every "
+            "frozen capability and choose one primary MCU/SoC here; an MCU family "
+            "is candidate metadata, never an input category. For fixed_exact, use "
+            "the exact user identity and do not substitute it. "
+            "If the requirement contains a USER-SELECTED CATALOG CANDIDATE, honor "
+            "that exact MPN/provider decision when it exists in the supplied catalog "
+            "evidence; never silently substitute a different candidate. "
             f"Keep the response bounded: select at most {_MAX_SELECTION_PARTS} "
             "physical parts, include "
             "exactly ref/symbol/value/footprint/role per part, and keep rationale "
             "under 200 characters. "
-            "Every MCU explicitly named in the requirement MUST appear as a selected "
-            "part, with role='mcu'. Never substitute a different MCU family. Select "
+            "Every MCU explicitly FIXED by the user MUST appear as a selected part "
+            "with role='mcu'. A family merely mentioned as an acceptable option is "
+            "not mandatory and must not create a second MCU. Select "
             "enough protection channels for every protected signal; a two-pin TVS "
             "protects only one signal and cannot be shared across different nets. "
             "A displayed part value MUST identify the actual installed KiCad symbol "
@@ -2203,14 +2712,18 @@ class SelectionStep(PipelineStepBase):
         )
         user = (
             f"Requirement:\n{state.requirement_text}\n\n"
-            f"Required MCU models: {requested_mcus or 'none explicitly named'}\n"
-            "Exact matching MCU symbols available in the installed KiCad library: "
-            f"{exact_mcu_symbols or 'none found'}\n"
-            "When an exact match is listed, use both its exact symbol ID and its "
-            "non-empty library-defined footprint.\n"
-            "Power-pin counts read from those exact installed MCU symbols: "
+            f"User-fixed MCU models: {fixed_mcus or 'none; select from capabilities'}\n"
+            f"Frozen MCU capability requirements: {mcu_capabilities}\n"
+            "Grounded MCU symbol candidates available in the installed KiCad library: "
+            f"{mcu_symbol_candidates or 'none found'}\n"
+            "For a fixed identity, use its exact symbol and non-empty library-defined "
+            "footprint. For capability-only selection, candidates are preferred but "
+            "must still satisfy the frozen capabilities.\n"
+            "Power-pin counts read from those installed MCU symbols: "
             f"{mcu_power_pin_counts or 'none'}\n"
             f"Required topology blocks: {topology_blocks or 'none'}\n"
+            "Frozen component role specifications (honor these before choosing "
+            f"MPNs): {role_specs or 'none'}\n"
             "Other installed KiCad symbol candidates matching named components: "
             f"{component_hints or 'none'}\n\n"
             f"{_facts_block(ctx)}"
@@ -2222,7 +2735,18 @@ class SelectionStep(PipelineStepBase):
         # Ground names and procurement data exactly as later selection deltas
         # are grounded before they can be merged into this plan.
         fixes: list[str] = []
-        _ground_selected_parts(plan.parts, state.requirement_text, fixes)
+        catalog_issues = _ground_selected_parts(
+            plan.parts,
+            state.requirement_text,
+            fixes,
+            topology.component_roles if isinstance(topology, TopologyPlan) else None,
+        )
+        plan.catalog_issues = list(dict.fromkeys(catalog_issues))[:100]
+        _apply_selection_identity_policy(
+            plan,
+            state.requirement_text,
+            topology if isinstance(topology, TopologyPlan) else None,
+        )
         for fix in fixes:
             state.record_auto_fix(self.step, fix)
         return plan, used
@@ -2284,10 +2808,25 @@ class SelectionStep(PipelineStepBase):
         finally:
             ctx.repair_feedback = base_feedback
         fixes: list[str] = []
-        _ground_selected_parts(patch.upsert_parts, state.requirement_text, fixes)
+        topology = state.artifact(PipelineStep.TOPOLOGY)
+        catalog_issues = _ground_selected_parts(
+            patch.upsert_parts,
+            state.requirement_text,
+            fixes,
+            topology.component_roles if isinstance(topology, TopologyPlan) else None,
+        )
         for fix in fixes:
             state.record_auto_fix(self.step, fix)
-        return _apply_selection_patch(artifact, patch), used
+        repaired = _apply_selection_patch(artifact, patch)
+        _apply_selection_identity_policy(
+            repaired,
+            state.requirement_text,
+            topology if isinstance(topology, TopologyPlan) else None,
+        )
+        repaired.catalog_issues = list(dict.fromkeys(
+            [*artifact.catalog_issues, *catalog_issues]
+        ))[:100]
+        return repaired, used
 
     def check(self, state: PipelineState, artifact: BaseModel) -> list[CheckResult]:
         assert isinstance(artifact, SelectionPlan)
@@ -2319,8 +2858,15 @@ class SelectionStep(PipelineStepBase):
                 f"topology blocks: {uncovered_blocks}"
             ),
         ))
-        requested_mcus = _mcu_models(state.requirement_text)
-        matched_mcu_parts: list[SelectedPart] = []
+        requested_mcus = _fixed_mcu_models(state.requirement_text)
+        requested_mcu_families = _mcu_family_options(state.requirement_text)
+        matched_mcu_parts: list[SelectedPart] = [
+            part
+            for part in artifact.parts
+            if part.role.strip().casefold() in {
+                "mcu", "microcontroller", "soc", "controller"
+            }
+        ] if not requested_mcus else []
         if requested_mcus:
             selected_models = _mcu_models(
                 " ".join(f"{p.value} {p.symbol}" for p in artifact.parts)
@@ -2365,6 +2911,37 @@ class SelectionStep(PipelineStepBase):
                             f"{expected_footprint!r}, got {p.footprint!r}"
                         ),
                     ))
+        elif requested_mcu_families:
+            selected_identities = [
+                re.sub(
+                    r"[^a-z0-9]",
+                    "",
+                    " ".join(
+                        (
+                            part.mpn,
+                            part.value,
+                            part.symbol,
+                            part.device_family,
+                            part.validation_profile,
+                        )
+                    ).casefold(),
+                )
+                for part in matched_mcu_parts
+            ]
+            family_matches = any(
+                family.casefold() in selected
+                for family in requested_mcu_families
+                for selected in selected_identities
+            )
+            checks.append(CheckResult(
+                name="requested_mcu_family_selected",
+                ok=family_matches,
+                message=(
+                    "selected MCU does not satisfy allowed family options "
+                    f"{requested_mcu_families}; selected identities: "
+                    f"{selected_identities}"
+                ),
+            ))
         if matched_mcu_parts:
             expected_vdd = sum(
                 _symbol_power_pin_counts(part.symbol)["VDD"]
@@ -2627,6 +3204,225 @@ class SelectionStep(PipelineStepBase):
         assert isinstance(artifact, SelectionPlan)
         grounded = sum(1 for p in artifact.parts if p.lcsc)
         return f"{len(artifact.parts)} parts ({grounded} grounded to a catalog MPN)"
+
+
+class ComponentPrepareStep(PipelineStepBase):
+    """Prepare selected symbols, footprints and procurement identities.
+
+    This stage records what is ready for release without making catalog freshness
+    or missing remote credentials an electrical design blocker. Schematic work can
+    continue with an explicit release gap; production export consumes this report.
+    """
+
+    step = PipelineStep.COMPONENT_PREPARE
+    knowledge_role = "selection"
+
+    def knowledge_query(self, state: PipelineState) -> str | None:
+        return f"component preparation and release evidence for: {state.requirement_text}"
+
+    def propose(
+        self, state: PipelineState, ctx: PipelineContext, knowledge: str
+    ) -> tuple[BaseModel, bool]:
+        selection = state.artifact(PipelineStep.SELECTION)
+        if not isinstance(selection, SelectionPlan):
+            return ComponentPrepareResult(
+                notes=["selection artifact is unavailable; preparation deferred"]
+            ), False
+
+        symbol_root = config.symbol_dir()
+        footprint_root = config.footprint_dir()
+        prepared: list[PreparedComponent] = []
+        unresolved: list[str] = []
+        external: list[str] = []
+        release_blockers: list[str] = []
+        catalog_issues = list(selection.catalog_issues)
+        for part in selection.parts:
+            notes: list[str] = []
+            blockers: list[str] = []
+            evidence: list[str] = []
+            if symbol_root is None:
+                symbol_status = "unverified"
+                notes.append("symbol library unavailable")
+                blockers.append("symbol library evidence is unavailable")
+            else:
+                symbol_status = "verified" if symbols.resolve_symbol(part.symbol) else "missing"
+                if symbol_status == "verified":
+                    evidence.append(f"installed-symbol:{part.symbol}")
+            if footprint_root is None:
+                footprint_status = "unverified"
+                notes.append("footprint library unavailable")
+                blockers.append("footprint library evidence is unavailable")
+            else:
+                footprint_status = (
+                    "verified" if part.footprint and footprints.footprint_pads(part.footprint)
+                    is not None else "missing"
+                )
+                if footprint_status == "verified":
+                    evidence.append(f"installed-footprint:{part.footprint}")
+            if symbol_status == "missing" or footprint_status == "missing":
+                asset_status = "missing"
+                blockers.append("symbol/footprint asset is missing")
+            elif symbol_status == "verified" and footprint_status == "verified":
+                asset_status = "verified"
+            else:
+                asset_status = "unverified"
+
+            mechanical = part.role.lower() in {"mounting_hole", "test_point", "fiducial"}
+            if not part.mpn and not mechanical:
+                unresolved.append(part.ref)
+                blockers.append("no grounded manufacturer part number")
+            if part.mpn:
+                evidence.append(f"mpn:{part.mpn}")
+            if not mechanical and part.package_match not in {"exact", "compatible"}:
+                blockers.append(
+                    f"catalog package match is {part.package_match!r}, not exact/compatible"
+                )
+            try:
+                datasheet_parts = urlsplit(part.datasheet)
+                datasheet_https = bool(
+                    datasheet_parts.scheme == "https" and datasheet_parts.netloc
+                )
+            except ValueError:
+                datasheet_https = False
+            if mechanical:
+                datasheet_status = "not_applicable"
+            elif not part.datasheet:
+                datasheet_status = "missing"
+                blockers.append("datasheet evidence is missing")
+            elif not datasheet_https:
+                datasheet_status = "invalid_url"
+                blockers.append("datasheet must be an absolute HTTPS URL")
+            else:
+                datasheet_status = "verified_https"
+                evidence.append(f"datasheet:{part.datasheet}")
+            if not mechanical and not part.catalog_provider:
+                blockers.append("catalog provider provenance is missing")
+            if not mechanical and not part.catalog_snapshot_id:
+                blockers.append("catalog query snapshot is missing")
+            elif part.catalog_snapshot_id:
+                evidence.append(f"catalog-snapshot:{part.catalog_snapshot_id}")
+            blockers.extend(part.constraint_gaps)
+            if part.lifecycle.casefold() in {
+                "obsolete",
+                "eol",
+                "end of life",
+                "not recommended for new designs",
+                "nrnd",
+            }:
+                blockers.append(f"lifecycle status is {part.lifecycle!r}")
+            if part.dnp:
+                blockers.append("component is marked DNP")
+            if part.asset_status == "unverified_external":
+                external.append(part.ref)
+                blockers.append("external asset is not validated")
+            blockers = list(dict.fromkeys(blockers))
+            component_release_ready = not blockers
+            status = (
+                "installed_exact"
+                if component_release_ready and part.package_match == "exact"
+                else "installed_qualified_validated"
+                if component_release_ready
+                else "unresolved"
+            )
+            part.release_ready = component_release_ready
+            part.unresolved = not component_release_ready
+            part.resolution_status = status
+            part.resolution_detail = "; ".join(blockers)
+            part.identity_provenance = part.catalog_snapshot_id
+            release_blockers.extend(f"{part.ref}: {blocker}" for blocker in blockers)
+            prepared.append(
+                PreparedComponent(
+                    ref=part.ref,
+                    role=part.role,
+                    symbol=part.symbol,
+                    footprint=part.footprint,
+                    mpn=part.mpn,
+                    lcsc=part.lcsc,
+                    provider=part.catalog_provider,
+                    datasheet=part.datasheet if hasattr(part, "datasheet") else "",
+                    package_match=part.package_match,
+                    datasheet_status=datasheet_status,
+                    symbol_status=symbol_status,
+                    footprint_status=footprint_status,
+                    asset_status=(
+                        "unverified_external" if part.asset_status == "unverified_external"
+                        else asset_status
+                    ),
+                    status=status,
+                    release_ready=component_release_ready,
+                    dnp=part.dnp,
+                    unresolved=not component_release_ready,
+                    quantity=part.quantity,
+                    notes=notes,
+                    blockers=blockers,
+                    evidence=evidence,
+                )
+            )
+        return (
+            ComponentPrepareResult(
+                components=prepared,
+                unresolved_refs=unresolved,
+                external_asset_refs=external,
+                catalog_issues=catalog_issues,
+                release_ready=(
+                    bool(prepared)
+                    and all(component.release_ready for component in prepared)
+                    and not release_blockers
+                ),
+                release_blockers=release_blockers,
+                notes=[
+                    "design may continue; release blockers are evaluated at manufacturing",
+                    "remote provider credentials are optional",
+                ],
+            ),
+            False,
+        )
+
+    def check(self, state: PipelineState, artifact: BaseModel) -> list[CheckResult]:
+        assert isinstance(artifact, ComponentPrepareResult)
+        selection = state.artifact(PipelineStep.SELECTION)
+        expected = len(selection.parts) if isinstance(selection, SelectionPlan) else 0
+        checks = [
+            CheckResult(
+                name="prepared_components_accounted",
+                ok=len(artifact.components) == expected,
+                message=(
+                    f"prepared {len(artifact.components)} component(s), expected {expected}"
+                ),
+            ),
+            CheckResult(
+                name="component_release_ready",
+                ok=artifact.release_ready,
+                severity=Severity.WARNING,
+                message=(
+                    "component preparation is not release-ready: "
+                    f"{artifact.release_blockers or ['unverified evidence']}"
+                ),
+            ),
+        ]
+        if artifact.external_asset_refs:
+            checks.append(CheckResult(
+                name="external_assets_validated",
+                ok=False,
+                severity=Severity.WARNING,
+                message=(
+                    "external assets require validation before production release: "
+                    f"{artifact.external_asset_refs}"
+                ),
+            ))
+        if artifact.catalog_issues:
+            checks.append(CheckResult(
+                name="catalog_evidence_available",
+                ok=False,
+                severity=Severity.WARNING,
+                message=f"catalog provider evidence gaps: {artifact.catalog_issues}",
+            ))
+        return checks
+
+    def summarize(self, artifact: BaseModel) -> str:
+        assert isinstance(artifact, ComponentPrepareResult)
+        ready = sum(c.asset_status == "verified" for c in artifact.components)
+        return f"{len(artifact.components)} components prepared; {ready} assets verified"
 
 
 _POWER_NET_HINTS = ("VBUS", "VCC", "VDD", "3V3", "5V", "3.3V", "VIN", "VBAT")
@@ -7431,8 +8227,9 @@ class RoutePlanesStep(PipelineStepBase):
 class RouteSignalsStep(PipelineStepBase):
     """Route remaining signals with Freerouting.
 
-    Planning/test contexts may opt into graceful degradation. Deployed
-    production contexts set ``require_freerouting`` and fail closed.
+    Builds fail closed by default. Planning/test contexts may explicitly set
+    ``require_freerouting=False`` when a deferred route is intentionally only
+    advisory.
     """
 
     step = PipelineStep.ROUTE_SIGNALS
@@ -7798,6 +8595,83 @@ def _run_kicad_drc(
     ]
 
 
+def _routing_release_violations(
+    state: PipelineState,
+    pcb_path: Path | None,
+) -> list[str]:
+    """Prove that the final board contains imported, fully routed copper.
+
+    KiCad reports zero unconnected items on a board whose pads have no nets at
+    all.  Therefore a clean DRC is insufficient: release also needs a complete
+    Freerouting result, real DSN/SES files, assigned pads, named PCB nets and
+    copper tracks in the final board.
+    """
+    route = state.artifact(PipelineStep.ROUTE_SIGNALS)
+    if not isinstance(route, RouteResult):
+        return ["routing: signal-routing result is missing"]
+
+    violations: list[str] = []
+    if route.method != "freerouting":
+        violations.append(f"routing: expected freerouting, got {route.method}")
+    if route.total_nets <= 0 or route.routed_nets < route.total_nets:
+        violations.append(
+            f"routing: only {route.routed_nets}/{route.total_nets} nets are complete"
+        )
+    if route.unconnected != 0:
+        violations.append(f"routing: unconnected count is {route.unconnected}, expected 0")
+    if route.assigned_pads <= 0:
+        violations.append("routing: no PCB pads were assigned to electrical nets")
+    if route.routed_tracks <= 0:
+        violations.append("routing: no copper tracks were imported")
+    for label, path_value in (("DSN", route.dsn_path), ("SES", route.ses_path)):
+        artifact_path = Path(path_value) if path_value else None
+        if (
+            artifact_path is None
+            or not artifact_path.is_file()
+            or artifact_path.stat().st_size <= 0
+        ):
+            violations.append(f"routing: {label} artifact is missing")
+
+    if pcb_path is None or not pcb_path.is_file():
+        violations.append("routing: final PCB file is missing")
+        return violations
+    try:
+        from ratsnestpro.eda.vendor.pcb import PcbBoard
+
+        board = PcbBoard.load(pcb_path)
+        board_nets = {
+            str(item.get("name", "")).lstrip("/")
+            for item in board.list_nets()
+            if str(item.get("name", "")).strip()
+        }
+        if not board_nets:
+            violations.append("routing: final PCB contains no named electrical nets")
+        pad_nets = {name.lstrip("/") for name in board.pad_net_names()}
+        if not pad_nets:
+            violations.append("routing: final PCB pads have no electrical net assignments")
+        pinmap = state.artifact(PipelineStep.SCH_PINMAP)
+        if isinstance(pinmap, PinMapPlan):
+            expected_nets = {net.name.lstrip("/") for net in pinmap.nets if net.pins}
+            missing_nets = sorted(expected_nets - board_nets)
+            if missing_nets:
+                violations.append(
+                    "routing: final PCB is missing schematic nets "
+                    f"{missing_nets[:20]}"
+                )
+            missing_pad_nets = sorted(expected_nets - pad_nets)
+            if missing_pad_nets:
+                violations.append(
+                    "routing: schematic nets are not assigned to final PCB pads "
+                    f"{missing_pad_nets[:20]}"
+                )
+        tracks = board.list_tracks()
+        if not tracks:
+            violations.append("routing: final PCB contains no copper track segments")
+    except (OSError, TypeError, ValueError) as exc:
+        violations.append(f"routing: final PCB connectivity cannot be read ({type(exc).__name__})")
+    return list(dict.fromkeys(violations))
+
+
 class ManufactureStep(PipelineStepBase):
     """DRC bottom-line + manufacturing outputs (BOM, CPL, optional Gerber).
 
@@ -7831,6 +8705,7 @@ class ManufactureStep(PipelineStepBase):
             write_art, PcbWriteResult
         ) else None
         cli = kicad_cli_available()
+        drc += _routing_release_violations(state, pcb_path)
         if cli and pcb_path is not None and pcb_path.is_file():
             drc += _run_kicad_drc(
                 cli,
@@ -7841,12 +8716,79 @@ class ManufactureStep(PipelineStepBase):
         # --- BOM (grouped-ish flat CSV from the selection) -----------------
         bom_path = out_dir / f"{state.project_name}_bom.csv"
         sel = state.artifact(PipelineStep.SELECTION)
+        preparation = state.artifact(PipelineStep.COMPONENT_PREPARE)
+        component_release_ready = (
+            preparation.release_ready
+            if isinstance(preparation, ComponentPrepareResult)
+            else False
+        )
+        component_release_blockers = (
+            list(preparation.release_blockers)
+            if isinstance(preparation, ComponentPrepareResult)
+            else ["component preparation report is unavailable"]
+        )
+        unresolved_manifest_path = out_dir / f"{state.project_name}_component_release.json"
+        prepared_by_ref = (
+            {component.ref: component for component in preparation.components}
+            if isinstance(preparation, ComponentPrepareResult)
+            else {}
+        )
         if isinstance(sel, SelectionPlan):
             with bom_path.open("w", newline="", encoding="utf-8") as fh:
                 wr = csv.writer(fh)
-                wr.writerow(["Reference", "Value", "Footprint", "MPN", "LCSC"])
+                wr.writerow([
+                    "Reference", "Value", "Footprint", "MPN", "LCSC", "Provider",
+                    "Provider Part ID", "Manufacturer", "Quantity", "Unit Price",
+                    "Currency", "Package Match", "Selection Confidence",
+                    "Catalog Snapshot", "Source URL", "Constraint Gaps",
+                    "ReleaseReady", "DNP", "Resolution", "Unresolved", "Evidence",
+                ])
                 for part in sel.parts:
-                    wr.writerow([part.ref, part.value, part.footprint, part.mpn, part.lcsc])
+                    prepared_component = prepared_by_ref.get(part.ref)
+                    wr.writerow([
+                        part.ref, part.value, part.footprint, part.mpn, part.lcsc,
+                        part.catalog_provider, part.provider_part_id, part.manufacturer,
+                        part.quantity, part.unit_price, part.price_currency,
+                        part.package_match, part.selection_confidence,
+                        part.catalog_snapshot_id, part.catalog_source_url,
+                        " | ".join(part.constraint_gaps),
+                        "yes" if prepared_component and prepared_component.release_ready else "no",
+                        "yes" if part.dnp else "no",
+                        prepared_component.status if prepared_component else "unresolved",
+                        "yes" if not prepared_component or prepared_component.unresolved else "no",
+                        " | ".join(prepared_component.evidence)
+                        if prepared_component else "",
+                    ])
+        if isinstance(preparation, ComponentPrepareResult):
+            proofs = [component.model_dump() for component in preparation.components]
+            unresolved_components = [
+                {
+                    "ref": component.ref,
+                    "status": component.status,
+                    "reason": "; ".join(component.blockers)
+                    or "component closure is unresolved",
+                    "evidence": component.evidence,
+                }
+                for component in preparation.components
+                if not component.release_ready
+            ]
+            manifest = {
+                "schema_version": COMPONENT_RELEASE_MANIFEST_SCHEMA,
+                "release_policy": COMPONENT_RELEASE_POLICY,
+                "release_ready": preparation.release_ready,
+                "selection_component_count": len(preparation.components),
+                "release_proven_component_count": sum(
+                    component.release_ready for component in preparation.components
+                ),
+                "component_release_proofs": proofs,
+                "unresolved_components": unresolved_components,
+                "catalog_issues": preparation.catalog_issues,
+                "notes": preparation.notes,
+            }
+            unresolved_manifest_path.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
         # --- CPL / pick-and-place (from the general placement) -------------
         cpl_path = out_dir / f"{state.project_name}_cpl.csv"
@@ -7862,7 +8804,7 @@ class ManufactureStep(PipelineStepBase):
         # --- Gerber (best-effort via kicad-cli) ----------------------------
         gerber_dir = out_dir / "gerber"
         gerber_ok = False
-        if cli and pcb_path is not None and pcb_path.is_file():
+        if cli and pcb_path is not None and pcb_path.is_file() and not drc:
             try:
                 import subprocess
 
@@ -7887,6 +8829,13 @@ class ManufactureStep(PipelineStepBase):
             ManufactureResult(
                 bom_path=str(bom_path) if isinstance(sel, SelectionPlan) else "",
                 cpl_path=str(cpl_path) if isinstance(plan, PcbPlacementPlan) else "",
+                unresolved_manifest_path=(
+                    str(unresolved_manifest_path)
+                    if isinstance(preparation, ComponentPrepareResult)
+                    else ""
+                ),
+                component_release_ready=component_release_ready,
+                component_release_blockers=component_release_blockers,
                 gerber_dir=str(gerber_dir) if gerber_ok else "",
                 gerber_exported=gerber_ok,
                 drc_violations=drc,
@@ -7903,6 +8852,15 @@ class ManufactureStep(PipelineStepBase):
                         message="BOM not written"),
             CheckResult(name="cpl_written", ok=bool(artifact.cpl_path),
                         message="CPL not written"),
+            CheckResult(
+                name="component_release_ready",
+                ok=artifact.component_release_ready,
+                severity=Severity.WARNING,
+                message=(
+                    "component release is not ready: "
+                    f"{artifact.component_release_blockers or ['no release report']}"
+                ),
+            ),
         ]
         if not artifact.gerber_exported:
             checks.append(CheckResult(
@@ -7922,6 +8880,7 @@ ALL_STEPS: list[PipelineStepBase] = [
     RequirementsStep(),
     TopologyStep(),
     SelectionStep(),
+    ComponentPrepareStep(),
     SchConnectionsStep(),
     SchPinMapStep(),
     SchLayoutStep(),
@@ -7942,6 +8901,7 @@ ARTIFACT_MODELS: dict[PipelineStep, type[BaseModel]] = {
     PipelineStep.REQUIREMENTS: RequirementSpec,
     PipelineStep.TOPOLOGY: TopologyPlan,
     PipelineStep.SELECTION: SelectionPlan,
+    PipelineStep.COMPONENT_PREPARE: ComponentPrepareResult,
     PipelineStep.SCH_CONNECTIONS: NetlistIntent,
     PipelineStep.SCH_PINMAP: PinMapPlan,
     PipelineStep.SCH_LAYOUT: SchLayoutPlan,

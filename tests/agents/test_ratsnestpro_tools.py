@@ -107,8 +107,10 @@ def test_blocked_pipeline_persists_intermediate_state(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("RATSNESTPRO_WORKSPACE_ROOT", str(tmp_path))
+    observed_require_routing: list[bool] = []
 
-    def stop_at_selection(_self, state, _context):
+    def stop_at_selection(_self, state, context):
+        observed_require_routing.append(context.require_freerouting)
         state.results.extend(
             [
                 StepResult(step=PipelineStep.REQUIREMENTS, summary="requirements"),
@@ -140,6 +142,7 @@ def test_blocked_pipeline_persists_intermediate_state(
     )
 
     assert result["status"] == "blocked"
+    assert observed_require_routing == [True]
     assert result["completed_steps"] == 3
     assert Path(result["pipeline_state_path"]).is_file()
     assert Path(result["pipeline_result_path"]).is_file()
@@ -148,6 +151,8 @@ def test_blocked_pipeline_persists_intermediate_state(
         {
             "name": "pin_pad_compatibility:J6",
             "message": "16 pins do not match 11 pads",
+            "failure_class": "footprint_mismatch",
+            "targets": [],
         }
     ]
 

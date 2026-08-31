@@ -8,17 +8,12 @@ coordinates, emits explicit no-connect markers, and drives power nets with
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ratsnestpro.domain.contracts import BoardPlan, CircuitIR
 from ratsnestpro.eda import SchematicDoc
 from ratsnestpro.eda import symbols as _symbols
-
-_POWER_NET_NAMES = {"GND", "GROUND", "VSS"}
-
-
-def _is_power(net_name: str, supply_net: str) -> bool:
-    return net_name.upper() in _POWER_NET_NAMES or net_name == supply_net
 
 
 def materialize_design(
@@ -26,50 +21,97 @@ def materialize_design(
     board: BoardPlan,
     supply_net: str = "3V3",
 ) -> SchematicDoc:
-    """Build a SchematicDoc from the IR and placement plan."""
-    doc = SchematicDoc.new()
-    placements = {p.ref: p for p in board.placements}
+    """Build a pin-connected schematic from the IR and placement plan.
 
-    # Place components at their planned coordinates.
-    for comp in ir.components:
-        pl = placements.get(comp.ref)
-        x = pl.x_mm if pl else 20.0
-        y = pl.y_mm if pl else 20.0
-        rot = pl.rotation_deg if pl else 0.0
-        doc.add_component(
-            lib_id=comp.symbol,
-            reference=comp.ref,
-            value=comp.value,
-            x=x,
-            y=y,
-            rotation=rot,
-            footprint=comp.footprint,
+    Pipeline A used to place one free-floating label per logical pin on an
+    arbitrary grid.  Its internal name/count round-trip passed, but KiCad quite
+    correctly reported every label as dangling.  Use the same real-pin
+    materializer as adaptive pipeline B so both entry points share one
+    electrical truth source.
+    """
+    components = []
+    # A board placement is not a schematic placement.  Reusing board-space
+    # coordinates here put several symbols directly on top of one another and
+    # could electrically short unrelated labelled pins.  Pipeline A has no
+    # separate schematic-layout artifact, so use a deterministic, spacious
+    # sheet grid instead.  ``board`` remains part of the stable API and is used
+    # by the persisted design plan, just not as sheet geometry.
+    _ = board
+    for index, comp in enumerate(ir.components):
+        column = index % 4
+        row = index // 4
+        components.append(
+            {
+                "ref": comp.ref,
+                "symbol": comp.symbol,
+                "value": comp.value,
+                "footprint": comp.footprint,
+                "x": 25.4 + column * 50.8,
+                "y": 20.32 + row * 27.94,
+                "rotation": 0.0,
+            }
         )
-
-    # Net labels on a collision-free grid in a region to the right of the board.
-    # (Positions are only for structural validity + label-netlist round-trip.)
-    label_x0 = 120.0
-    label_y0 = 10.0
-    step = 2.54
-    cols = 40
-    counter = 0
+    symbol_by_ref = {component.ref: component.symbol for component in ir.components}
+    nets = []
     for net in ir.nets:
-        for _pin in net.pins:
-            col = counter % cols
-            row = counter // cols
-            x = label_x0 + col * step
-            y = label_y0 + row * step
-            doc.add_net_label(net.name, x, y)
-            counter += 1
-
-    # Power symbols for supply + ground (visual/GUI intent).
-    py = label_y0
+        mapped_pins = []
+        for pin in net.pins:
+            symbol = symbol_by_ref.get(pin.component_ref, "")
+            number = _physical_pin_number(symbol, pin.pin) or pin.pin
+            mapped_pins.append({"ref": pin.component_ref, "number": number})
+        nets.append({"name": net.name, "pins": mapped_pins})
+    no_connect_pins = [
+        {
+            "ref": pin.component_ref,
+            "number": (
+                _physical_pin_number(
+                    symbol_by_ref.get(pin.component_ref, ""),
+                    pin.pin,
+                )
+                or pin.pin
+            ),
+        }
+        for pin in ir.no_connect_pins
+    ]
+    power_nets = [supply_net]
     for net in ir.nets:
-        if _is_power(net.name, supply_net):
-            doc.add_power_symbol(net.name, 110.0, py)
-            py += step
+        purpose = str(net.properties.get("purpose", "")).casefold()
+        if net.name.upper() in {"VBUS", "VIN"} or "input" in purpose:
+            if net.name not in power_nets:
+                power_nets.append(net.name)
+    return materialize_pinmapped(
+        components,
+        nets,
+        no_connect_pins=no_connect_pins,
+        supply_nets=power_nets,
+        ground_net="GND",
+    )
 
-    return doc
+
+def _physical_pin_number(symbol: str, logical: str) -> str | None:
+    """Resolve pipeline A's logical pin aliases against the real symbol."""
+    pins = _symbols.symbol_pins(symbol) or []
+    term = logical.strip().casefold()
+    if not term:
+        return None
+    aliases = {term}
+    if term in {"in", "out"}:
+        aliases.add(f"v{term}")
+    for pin in pins:
+        if str(pin.get("number", "")).casefold() in aliases:
+            return str(pin["number"])
+    for pin in pins:
+        names = {str(pin.get("name", "")).casefold()}
+        names.update(str(value).casefold() for value in pin.get("alternates", ()))
+        tokens = {
+            token
+            for name in names
+            for token in re.split(r"[/~{}() ]+", name)
+            if token
+        }
+        if aliases & (names | tokens):
+            return str(pin["number"])
+    return None
 
 
 
@@ -102,8 +144,8 @@ def materialize_pinmapped(
     for c in components:
         ref = str(c["ref"])
         symbol = str(c["symbol"])
-        x = float(c.get("x", 20.0))
-        y = float(c.get("y", 20.0))
+        x = _snap_schematic_coord(float(c.get("x", 20.0)))
+        y = _snap_schematic_coord(float(c.get("y", 20.0)))
         rot = float(c.get("rotation", 0.0))
         placements[ref] = (x, y, rot)
         if symbol not in pins_cache:
@@ -160,6 +202,11 @@ def materialize_pinmapped(
             seen_power.add(name)
     doc.embed_lib_symbols()
     return doc
+
+
+def _snap_schematic_coord(value: float, grid: float = 1.27) -> float:
+    """Snap symbol origins to KiCad's conventional 50 mil connection grid."""
+    return round(value / grid) * grid
 
 
 def _pin_coord(

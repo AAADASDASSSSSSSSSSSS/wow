@@ -433,7 +433,10 @@ def test_signal_routing_degrades_gracefully(monkeypatch) -> None:
         MappedNet(name="N1", kind="signal", pins=[
             MappedPin(ref="R1", logical="1", number="1"),
             MappedPin(ref="R2", logical="1", number="1")])])
-    RouteSignalsStep().run(state, PipelineContext(mode=LlmMode.OFFLINE))
+    RouteSignalsStep().run(
+        state,
+        PipelineContext(mode=LlmMode.OFFLINE, require_freerouting=False),
+    )
     result = state.results[-1]
     art = state.artifact(PipelineStep.ROUTE_SIGNALS)
     assert isinstance(art, RouteResult)

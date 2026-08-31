@@ -20,11 +20,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agents.ratsnestpro.diagnosis import DiagnosisReport, RepairStrategy
 
-# Canonical 17-step order; a patch re-runs its scope and everything downstream.
+# Canonical pipeline order; a patch re-runs its scope and everything downstream.
 PIPELINE_ORDER: tuple[str, ...] = (
     "requirements",
     "topology",
     "selection",
+    "component_prepare",
     "schematic_connections",
     "schematic_pinmap",
     "schematic_layout",

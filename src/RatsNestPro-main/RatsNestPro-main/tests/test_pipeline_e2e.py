@@ -6,6 +6,7 @@ import pytest
 
 from ratsnestpro import config
 from ratsnestpro.agents.llm import LlmMode
+from ratsnestpro.cli import main
 from ratsnestpro.eda import routing
 from ratsnestpro.eda.adapter import ErcResult
 from ratsnestpro.families import Atmega328Params, build_ir
@@ -123,31 +124,38 @@ class _ReferenceDesignLLM:
 
 def _context(tmp_path) -> PipelineContext:
     return PipelineContext(
-        mode=LlmMode.AUTO, client=_ReferenceDesignLLM(), out_dir=str(tmp_path)
+        mode=LlmMode.AUTO,
+        client=_ReferenceDesignLLM(),
+        out_dir=str(tmp_path),
+        require_freerouting=True,
     )
 
 
-def test_full_pipeline_reaches_manufacture(tmp_path) -> None:
+def test_unrouted_pipeline_stops_before_manufacture(tmp_path) -> None:
     state = PipelineState(requirement_text="ATmega328 USB-C 3.3V 8MHz dev board",
                           project_name="e2e")
     Pipeline().run(state, _context(tmp_path))
     completed = set(state.completed)
-    # The whole fixed flow runs end-to-end and reaches manufacturing.
-    assert PipelineStep.MANUFACTURE in completed
-    assert len(state.results) == len(ALL_STEPS)
-    assert not state.blocked
-    # Deliverables written.
+    assert PipelineStep.ROUTE_SIGNALS in completed
+    assert PipelineStep.MANUFACTURE not in completed
+    assert state.blocked
+    route_result = state.results[-1]
+    assert route_result.step == PipelineStep.ROUTE_SIGNALS
+    assert route_result.blocked
+    # Design artifacts remain available for diagnosis, but manufacturing
+    # outputs must not be presented as released deliverables.
     assert (tmp_path / "e2e.kicad_sch").exists()
     assert (tmp_path / "e2e.kicad_pcb").exists()
-    assert (tmp_path / "e2e_bom.csv").exists()
-    assert (tmp_path / "e2e_cpl.csv").exists()
+    assert not (tmp_path / "e2e_bom.csv").exists()
+    assert not (tmp_path / "e2e_cpl.csv").exists()
 
 
 def test_full_pipeline_order_matches_canonical(tmp_path) -> None:
     state = PipelineState(requirement_text="ATmega328 USB-C 3.3V 8MHz dev board",
                           project_name="ord")
     Pipeline().run(state, _context(tmp_path))
-    assert state.completed == [s.step for s in ALL_STEPS]
+    route_index = [s.step for s in ALL_STEPS].index(PipelineStep.ROUTE_SIGNALS)
+    assert state.completed == [s.step for s in ALL_STEPS][: route_index + 1]
 
 
 def test_no_proposal_blocks_instead_of_substituting_a_design(tmp_path) -> None:
@@ -159,3 +167,27 @@ def test_no_proposal_blocks_instead_of_substituting_a_design(tmp_path) -> None:
     selection = state.artifact(PipelineStep.SELECTION)
     assert isinstance(selection, SelectionPlan)
     assert selection.parts == []
+
+
+def test_pcb_cli_requires_real_routing(tmp_path, monkeypatch) -> None:
+    observed: list[bool] = []
+
+    def record_context(_self, state, context, until=None):
+        observed.append(context.require_freerouting)
+        return state
+
+    monkeypatch.setattr(pl.Pipeline, "run", record_context)
+
+    rc = main([
+        "pcb",
+        "generic sensor board",
+        "--project",
+        "cli-safe",
+        "--out",
+        str(tmp_path),
+        "--llm",
+        "offline",
+    ])
+
+    assert rc == 0
+    assert observed == [True]

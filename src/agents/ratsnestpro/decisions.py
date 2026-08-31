@@ -365,6 +365,99 @@ def intent_decisions(intent: dict[str, Any], language: str) -> list[OpenDecision
     ]
 
 
+def part_selection_decisions(
+    candidates: list[dict[str, Any]],
+    language: str,
+    *,
+    settled: frozenset[str] = frozenset(),
+    limit: int = 6,
+) -> list[OpenDecision]:
+    """Offer a choice only when a named part has genuinely tied candidates."""
+    decisions: list[OpenDecision] = []
+    for item in candidates:
+        if len(decisions) >= limit or not isinstance(item, dict):
+            break
+        query = str(item.get("query") or "").strip()
+        options_data = [candidate for candidate in item.get("results", []) if isinstance(candidate, dict)]
+        if not query or len(options_data) < 2:
+            continue
+        slot = f"catalog_{re.sub(r'[^A-Za-z0-9]+', '_', query).strip('_').lower()}"
+        if slot in settled:
+            continue
+        top = options_data[:4]
+        if not all(str(candidate.get("mpn") or "").strip() for candidate in top):
+            continue
+        first = top[0]
+        second = top[1]
+        first_score = (
+            str(first.get("package_match") or "unknown"),
+            bool(first.get("basic")),
+            str(first.get("provider") or "catalog"),
+            int(first.get("stock") or 0) > 0,
+        )
+        second_score = (
+            str(second.get("package_match") or "unknown"),
+            bool(second.get("basic")),
+            str(second.get("provider") or "catalog"),
+            int(second.get("stock") or 0) > 0,
+        )
+        first_price = float(first.get("price") or 0)
+        second_price = float(second.get("price") or 0)
+        price_near = (
+            not first_price
+            or not second_price
+            or abs(first_price - second_price) / max(first_price, second_price) <= 0.1
+        )
+        first_lead = first.get("lead_days")
+        second_lead = second.get("lead_days")
+        lead_near = (
+            first_lead is None
+            or second_lead is None
+            or abs(int(first_lead) - int(second_lead)) <= 7
+        )
+        same_mpn = str(first.get("mpn") or "").casefold() == str(
+            second.get("mpn") or ""
+        ).casefold()
+        if first_score != second_score or not price_near or not lead_near or same_mpn:
+            continue
+        options = []
+        for index, candidate in enumerate(top, start=0):
+            provider = str(candidate.get("provider") or "catalog")
+            mpn = str(candidate.get("mpn") or "")
+            lcsc = str(candidate.get("lcsc") or "")
+            package = str(candidate.get("package") or "")
+            key = chr(ord("A") + index)
+            options.append(
+                DecisionOption(
+                    key=key,
+                    label=(
+                        f"{mpn} / {lcsc or 'no LCSC'} / {package or 'package unknown'} "
+                        f"({provider})"
+                    ),
+                    value=(
+                        f"Use catalog candidate for {query}: MPN={mpn}; "
+                        f"LCSC={lcsc}; provider={provider}; do not silently substitute."
+                    ),
+                    basis=str(candidate.get("snapshot_id") or "catalog query snapshot"),
+                )
+            )
+        decisions.append(
+            OpenDecision(
+                slot=slot,
+                kind="part_selection",
+                question=(
+                    f"{query} has multiple equally ranked catalog candidates; "
+                    "which one should the BOM use?"
+                    if language != "zh"
+                    else f"{query} 有多个排名相同的目录候选，BOM 应使用哪一个？"
+                ),
+                options=options,
+                recommended_key="A",
+            )
+        )
+    return decisions
+
+
 # --------------------------------------------------------------------------- #
 # Rendering
 # --------------------------------------------------------------------------- #

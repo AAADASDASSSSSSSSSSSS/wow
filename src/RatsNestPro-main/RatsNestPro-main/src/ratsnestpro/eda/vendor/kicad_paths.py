@@ -53,9 +53,18 @@ def _share_dirs(kind: str) -> List[Path]:
     """kind is 'footprints' or 'symbols'."""
     out = []
     for root in _install_roots():
-        for sub in ((root / "share" / "kicad" / kind),
-                    (root / "share" / "kicad" / kind),
-                    (root / "Resources" / "share" / "kicad" / kind)):
+        # Linux and Windows packages use ``share/kicad``.  macOS application
+        # bundles use ``Contents/SharedSupport`` (KiCad 10), while some older
+        # or repackaged bundles put the same data under ``Resources``.  Keep
+        # every layout here so config, grounding and preflight all discover the
+        # exact same libraries without requiring machine-specific environment
+        # variables.
+        for sub in (
+            root / "share" / "kicad" / kind,
+            root / "SharedSupport" / kind,
+            root / "SharedSupport" / "kicad" / kind,
+            root / "Resources" / "share" / "kicad" / kind,
+        ):
             if sub.exists():
                 out.append(sub)
     # De-duplicate preserving order.

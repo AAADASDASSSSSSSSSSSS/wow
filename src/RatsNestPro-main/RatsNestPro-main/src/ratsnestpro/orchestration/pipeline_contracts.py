@@ -28,6 +28,19 @@ _COMPONENT_REFERENCE_RANGE_RE = re.compile(
 _COMPONENT_REFERENCE_SEPARATORS_RE = re.compile(r"[\s,，、;/&+]+")
 _MAX_REFERENCE_RANGE_EXPANSION = 64
 
+# Durable component-release contract shared by generation and standalone
+# project review. Keep these values stable: produced projects may be reviewed
+# by a later RatsNest version.
+COMPONENT_RELEASE_MANIFEST_SCHEMA = 2
+COMPONENT_RELEASE_POLICY = "explicit_component_closure_v1"
+RELEASE_PROVEN_STATUSES = frozenset(
+    {
+        "installed_exact",
+        "installed_qualified_validated",
+        "replaceable_grounded",
+    }
+)
+
 
 def _expanded_component_references(ref: str) -> list[str] | None:
     """Expand an unambiguous grouped reference emitted by an LLM.
@@ -116,6 +129,29 @@ class TopologyBlock(ProposalModel):
     description: str = Field(default="", max_length=2_000)
 
 
+class ComponentRoleSpec(ProposalModel):
+    """A procurement-neutral role frozen before choosing a manufacturer part."""
+
+    role: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=1_000)
+    value: str = Field(default="", max_length=200)
+    symbol: str = Field(default="", max_length=200)
+    footprint: str = Field(default="", max_length=240)
+    package: str = Field(default="", max_length=80)
+    manufacturer: str = Field(default="", max_length=160)
+    selection_mode: Literal["capability_only", "fixed_exact"] = "capability_only"
+    required_capabilities: list[str] = Field(default_factory=list, max_length=64)
+    selection_basis: str = Field(default="", max_length=1_000)
+    quantity: int = Field(default=1, ge=1, le=1_000)
+    required: bool = True
+    exact_mpn: str = Field(default="", max_length=160)
+    min_stock: int = Field(default=0, ge=0)
+    max_price: float | None = Field(default=None, ge=0)
+    max_lead_days: int | None = Field(default=None, ge=0, le=10_000)
+    hard_constraints: list[str] = Field(default_factory=list, max_length=32)
+    soft_preferences: list[str] = Field(default_factory=list, max_length=32)
+
+
 class TopologyPlan(ProposalModel):
     """The block-level architecture: functional blocks + supply rails.
 
@@ -124,6 +160,7 @@ class TopologyPlan(ProposalModel):
     """
 
     blocks: list[TopologyBlock] = Field(default_factory=list, max_length=200)
+    component_roles: list[ComponentRoleSpec] = Field(default_factory=list, max_length=500)
     rails: list[str] = Field(default_factory=list, max_length=50)
     ground_net: str = Field(default="GND", min_length=1, max_length=100)
     rationale: str = Field(default="", max_length=10_000)
@@ -190,9 +227,28 @@ class SelectedPart(ProposalModel):
         max_length=32,
         pattern=r"^(?:|fixed_exact|family_variant|capability_only)$",
     )
+    device_family: str = Field(default="", max_length=120)
+    validation_profile: str = Field(default="", max_length=160)
     identity_provenance: str = Field(default="", max_length=240)
     resolution_status: str = Field(default="", max_length=64)
     resolution_detail: str = Field(default="", max_length=1_000)
+    catalog_provider: str = Field(default="", max_length=40)
+    provider_part_id: str = Field(default="", max_length=160)
+    manufacturer: str = Field(default="", max_length=160)
+    package_match: str = Field(default="unknown", max_length=32)
+    asset_status: str = Field(default="unverified", max_length=32)
+    lifecycle: str = Field(default="", max_length=80)
+    rohs: str = Field(default="", max_length=80)
+    lead_days: int | None = Field(default=None, ge=0, le=10_000)
+    unit_price: float = Field(default=0.0, ge=0)
+    price_currency: str = Field(default="CNY", max_length=8)
+    catalog_snapshot_id: str = Field(default="", max_length=240)
+    selection_confidence: float = Field(default=0.0, ge=0, le=1)
+    selection_reason: str = Field(default="", max_length=1_000)
+    datasheet: str = Field(default="", max_length=1_000)
+    catalog_source_url: str = Field(default="", max_length=1_000)
+    constraint_gaps: list[str] = Field(default_factory=list, max_length=64)
+    quantity: int = Field(default=1, ge=1, le=1_000)
     release_ready: bool = False
     dnp: bool = False
     unresolved: bool = False
@@ -203,6 +259,7 @@ class SelectionPlan(ProposalModel):
 
     parts: list[SelectedPart] = Field(default_factory=list, max_length=1_000)
     rationale: str = Field(default="", max_length=10_000)
+    catalog_issues: list[str] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="before")
     @classmethod
@@ -215,6 +272,44 @@ class SelectionPlan(ProposalModel):
         if len(refs) != len(set(refs)):
             raise ValueError("selected part references must be unique")
         return self
+
+
+class PreparedComponent(ProposalModel):
+    """One selected component after library and procurement asset preparation."""
+
+    ref: str = Field(min_length=1, max_length=32)
+    role: str = Field(default="", max_length=120)
+    symbol: str = Field(default="", max_length=200)
+    footprint: str = Field(default="", max_length=240)
+    mpn: str = Field(default="", max_length=160)
+    lcsc: str = Field(default="", max_length=40)
+    provider: str = Field(default="", max_length=40)
+    datasheet: str = Field(default="", max_length=1_000)
+    package_match: str = Field(default="unknown", max_length=32)
+    datasheet_status: str = Field(default="missing", max_length=32)
+    symbol_status: str = Field(default="unverified", max_length=32)
+    footprint_status: str = Field(default="unverified", max_length=32)
+    asset_status: str = Field(default="unverified", max_length=32)
+    status: str = Field(default="unresolved", max_length=64)
+    release_ready: bool = False
+    dnp: bool = False
+    unresolved: bool = True
+    quantity: int = Field(default=1, ge=1, le=1_000)
+    notes: list[str] = Field(default_factory=list, max_length=20)
+    blockers: list[str] = Field(default_factory=list, max_length=64)
+    evidence: list[str] = Field(default_factory=list, max_length=64)
+
+
+class ComponentPrepareResult(ProposalModel):
+    """Preparation report; unresolved procurement evidence is release-only."""
+
+    components: list[PreparedComponent] = Field(default_factory=list, max_length=1_000)
+    unresolved_refs: list[str] = Field(default_factory=list, max_length=1_000)
+    external_asset_refs: list[str] = Field(default_factory=list, max_length=1_000)
+    catalog_issues: list[str] = Field(default_factory=list, max_length=100)
+    release_ready: bool = False
+    release_blockers: list[str] = Field(default_factory=list, max_length=1_000)
+    notes: list[str] = Field(default_factory=list, max_length=100)
 
 
 class SelectionPatch(ProposalModel):

@@ -21,6 +21,10 @@ from ratsnestpro.orchestration.pipeline import (
 from ratsnestpro.orchestration.pipeline_contracts import TopologyPlan
 
 
+def test_pipeline_context_requires_real_routing_by_default() -> None:
+    assert PipelineContext().require_freerouting
+
+
 class FakeLLM:
     """Returns canned JSON per requested model, recording calls."""
 

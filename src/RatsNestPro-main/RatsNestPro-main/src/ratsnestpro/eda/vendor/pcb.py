@@ -201,6 +201,25 @@ class PcbBoard:
                     names.append(name)
         return [{"index": i, "name": name} for i, name in enumerate(sorted(names))]
 
+    def pad_net_names(self) -> List[str]:
+        """Named electrical nets actually assigned to footprint pads.
+
+        A top-level net declaration alone does not prove PCB connectivity.  In
+        particular, the pipeline's pre-routing board may declare net 0 only,
+        and a malformed board can declare many names without assigning any pad.
+        Reading pad assignments separately lets release and review distinguish
+        a connected PCB from an empty net table.
+        """
+        names: List[str] = []
+        seen = set()
+        for fp in find_all(self.root, "footprint"):
+            for pad in find_all(fp, "pad"):
+                name = self._net_name_of_reference(find_first(pad, "net"))
+                if name and name not in seen:
+                    seen.add(name)
+                    names.append(name)
+        return sorted(names)
+
     def _net_name_of_reference(self, node: Optional[list]) -> Optional[str]:
         """The net a ``segment`` / ``via`` / ``zone`` node points at, by name.
 

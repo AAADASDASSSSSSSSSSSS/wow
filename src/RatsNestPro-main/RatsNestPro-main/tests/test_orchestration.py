@@ -88,12 +88,11 @@ def test_cli_rejects_contradictory_params(tmp_path, capsys) -> None:
 @pytest.mark.real_kicad
 @pytest.mark.skipif(not REAL_KICAD, reason="requires real KiCad 10 CLI (opt-in)")
 def test_generate_runs_real_erc(tmp_path) -> None:
-    # With real KiCad, the ERC gate must actually run (not UNAVAILABLE). It may
-    # report unconnected-pin errors because symbol pin geometry is not embedded;
-    # the point of this slice is that ERC executes and its result is recorded.
+    # With real KiCad, the complete reference must pass, not merely execute ERC.
     result = generate_design(
         "ATmega328 16MHz 5V LED", params=Atmega328Params(),
         out_dir=tmp_path / "real", run_erc=True,
     )
     erc = result.report.gate("kicad_erc")
-    assert erc is not None and erc.status != GateStatus.UNAVAILABLE
+    assert erc is not None and erc.status == GateStatus.PASSED
+    assert not [finding for finding in erc.findings if finding.severity.value == "error"]

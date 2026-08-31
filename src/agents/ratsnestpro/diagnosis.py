@@ -234,7 +234,7 @@ _TARGET_REF_RE = re.compile(r"\b([UJDRCLQYFK]\d{1,3})\b")
 # pipeline did not finish"). Diagnosing them again adds noise and would record a
 # bogus capability gap, so they are skipped in favour of the real failure.
 _DERIVED_BLOCKER_RE = re.compile(
-    r"17-step pipeline did not complete|pipeline stopped before|"
+    r"(?:17|18)-step pipeline did not complete|pipeline stopped before|"
     r"no actual (?:\w+ )*\.(?:kicad_sch|kicad_pcb|dsn|ses) artifact|"
     r"routing unconnected count is not zero",
     re.IGNORECASE,

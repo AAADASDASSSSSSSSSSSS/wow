@@ -58,15 +58,28 @@ def test_wrong_crystal_load_cap_blocks() -> None:
     assert report.blocked is True
 
 
+def test_wrong_power_stage_output_cap_blocks() -> None:
+    params = Atmega328Params(crystal_mhz=16, ldo_output_v=5.0)
+    ir = build_ir(params)
+    ir.component("C10").value = "1uF"
+
+    report = verify_design(ir, expectations_for(params))
+
+    gate = report.gate("ldo_caps")
+    assert gate.status == GateStatus.FAILED
+    assert any(finding.rule_id == "LDO-005" for finding in gate.findings)
+
+
 def test_missing_supply_net_flagged() -> None:
     p = Atmega328Params()
     ir = build_ir(p)
+    exp = expectations_for(p)
     # Rename the supply net to simulate a broken IR.
     for net in ir.nets:
-        if net.name == "3V3":
+        if net.name == exp.supply_net:
             net.name = "VDD_BROKEN"
             break
-    report = verify_design(ir, expectations_for(p))
+    report = verify_design(ir, exp)
     assert report.gate("voltage").status == GateStatus.FAILED
 
 

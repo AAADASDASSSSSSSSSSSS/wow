@@ -73,8 +73,8 @@ Most "AI builds your PCB" demos let the language model grade its own homework: t
 
 Three consequences of that principle define the project:
 
-1. **Fail-closed gates.** A 17-step, knowledge-driven pipeline where every step has checks that block on failure. A downgraded check is still reported (with the citation it overrode); it is never silently deleted.
-2. **Grounded, not hallucinated.** Parts come from a local JLCPCB catalog (no invented MPN/LCSC codes). Symbols and footprints are resolved against the installed KiCad libraries. Routing must actually complete: KiCad DSN → Freerouting → SES with **zero unconnected items** is a blocking production gate.
+1. **Fail-closed gates.** An 18-step, knowledge-driven pipeline where every step has checks that block on failure. A downgraded check is still reported (with the citation it overrode); it is never silently deleted.
+2. **Grounded, not hallucinated.** Parts come from a local JLCPCB catalog or an explicitly configured procurement API (no invented MPN/LCSC codes). Symbols and footprints are resolved against the installed KiCad libraries. Routing must actually complete: KiCad DSN → Freerouting → SES with **zero unconnected items** is a blocking production gate.
 3. **Honest delivery status.** A run resolves to exactly one of `execution_blocked`, `delivered_with_issues`, or `release_ready`. Readiness is derived from evidence, never inferred from prose.
 
 ---
@@ -85,7 +85,7 @@ Three consequences of that principle define the project:
 Not a pile of classes named "agent." A LangGraph **supervisor** delegates to four specialists with distinct prompts, contracts, permissions, and bounded tool authority. Handoffs are typed Pydantic models, not free-form prose. The Hardware Engineer, for example, can only apply validated `set_param` operations — it cannot write arbitrary files or execute a shell.
 
 ### 🔒 Deterministic fail-closed verification
-The authoritative core is deterministic. The 17-step pipeline runs real ERC/DRC and connectivity checks; a failing gate blocks and emits an actionable instruction. The independent Reviewer **cannot alter gate severities** — it audits and narrates, it does not overrule.
+The authoritative core is deterministic. The 18-step pipeline runs real ERC/DRC and connectivity checks; a failing gate blocks and emits an actionable instruction. The independent Reviewer **cannot alter gate severities** — it audits and narrates, it does not overrule.
 
 ### 🧠 Pre-build risk arbitration (ACK-RISK)
 Before any design work runs, a `build` request is arbitrated against device **fact sheets**. If a requested value breaks a cited datasheet limit, the graph stops and states the value, the limit, the page it came from, and the exact `ACK-RISK:` token that would accept it. Deterministic code discards any token that wasn't actually offered — so a hallucinated or over-generous reply **cannot waive a limit the user never saw.**
@@ -171,10 +171,10 @@ flowchart LR
 
 | Agent | Responsibility | Bounded authority |
 | --- | --- | --- |
-| 🏛 **Architect** | Requirement research (web search), device-family judgment, parameter selection, produces an **immutable `DesignPlan`** | Advisory research only; cannot alter gate verdicts |
-| 🔧 **Hardware Engineer** | Runs the full 17-step pipeline: generation, verification, repair | Only validated `set_param` ops — no arbitrary file writes, no shell |
+| 🏛 **Architect** | Freezes capability, interface, power and physical constraints into an **immutable `DesignPlan`**; preserves an exact part only when the user fixed it | Advisory research only; cannot alter gate verdicts or preselect a family for a capability-only request |
+| 🔧 **Hardware Engineer** | Runs the full 18-step pipeline: generation, verification, repair | Only validated `set_param` ops — no arbitrary file writes, no shell |
 | 🔍 **Reviewer** | Independent audit of any KiCad project; severity-preserving narrative | **Cannot change** authoritative gate severities |
-| 📦 **Parts Specialist** | Grounded catalog search over a local JLCPCB SQLite cache | Cannot invent MPN / LCSC data |
+| 📦 **Parts Specialist** | Grounded catalog search with JLCPCB priority and optional DigiKey/Mouser adapters | Cannot invent MPN / LCSC, stock, or price data |
 
 The supervisor can select one role or make sequential handoffs (e.g. *generate, then audit* → Hardware Engineer → Reviewer). Every transfer is streamed to the UI so delegation is visible in real time.
 
@@ -190,7 +190,7 @@ flowchart TD
     INIT --> RISK{"Value breaks a<br/>cited datasheet limit?"}
     RISK -->|"yes · not acknowledged"| CLAR["clarify_risk<br/>state value · limit · page · ACK-RISK token"] --> STOP(["⏸ End turn — nothing built"])
     RISK -->|"no / acknowledged"| PLAN["🏛 Architect<br/>immutable DesignPlan"]
-    PLAN --> PIPE["🔧 17-step pipeline<br/>select · schematic · layout ..."]
+    PLAN --> PIPE["🔧 18-step pipeline<br/>select · prepare · schematic · layout ..."]
     PIPE --> GATE{"Deterministic<br/>fail-closed gates"}
     GATE -->|"fail · recoverable"| REPAIR["♻️ AHE self-repair<br/>bounded budget"] --> PIPE
     GATE -->|"pass"| ROUTE["🏭 KiCad DSN → Freerouting → SES<br/>zero unconnected items"]
@@ -198,7 +198,7 @@ flowchart TD
     REV --> ART["📦 Immutable artifact manifest<br/>delivery status"]
 ```
 
-**The 17-step knowledge-driven pipeline** covers device-family selection, grounded part selection, schematic connection, ERC, placement, plane/layer planning, routing, DRC, and reporting — each step gated by checks that read real tool output. Examples of the kind of defect these deterministic checks catch (and that pure-LLM flows miss):
+**The 18-step knowledge-driven pipeline** covers requirement-driven topology, capability-based and grounded part selection, component preparation, schematic connection, ERC, placement, plane/layer planning, routing, DRC, and reporting. STM32/ESP32/RP2040/AVR are not request categories. A broad family named by the user only narrows the candidate set; the concrete device is still chosen during selection. A user-fixed exact MPN remains a hard constraint. Each step is gated by checks that read real tool output. Examples of the kind of defect these deterministic checks catch (and that pure-LLM flows miss):
 
 - a mounting hole "selected" as a 6-pin active oscillator, then relabeled `mechanical`;
 - a crystal wired to the 32.768 kHz LSE channel when the brief asked for the HSE channel — caught by reading the symbol's alternate pin names, not the (misleading) net name;
@@ -297,6 +297,13 @@ RATSNESTPRO_AHE_ENABLED=true           # bounded in-task self-repair
 RATSNESTPRO_TEMPORAL_ENABLED=true      # durable Hardware Engineer execution
 ```
 
+Component selection uses JLCPCB/LCSC first. DigiKey and Mouser are optional
+provider adapters; configure `DIGIKEY_CLIENT_ID` plus either
+`DIGIKEY_CLIENT_SECRET` (automatic two-legged OAuth) or a short-lived
+`DIGIKEY_ACCESS_TOKEN`, or configure `MOUSER_API_KEY`. Provider responses are
+cached as dated snapshots, and missing credentials remain a release evidence gap
+instead of stopping schematic or layout work.
+
 ---
 
 ## 💡 Usage Examples
@@ -307,8 +314,8 @@ From the Streamlit console (or the Next.js workspace), select `ratsnestpro-multi
 # Generate an immutable design plan
 Generate an immutable design plan for an ATmega328 USB-C 5V 16MHz dev board; run_name demo-plan.
 
-# Run the full 17-step PCB pipeline
-Run the full 17-step PCB flow: ATmega328 USB-C 3.3V 8MHz; run_name demo-pcb.
+# Run the full 18-step PCB pipeline
+Run the full 18-step PCB flow: ATmega328 USB-C 3.3V 8MHz; run_name demo-pcb.
 
 # Independently review an existing KiCad project
 Review the KiCad project under runs/demo-pcb and produce a Markdown report.
@@ -406,7 +413,7 @@ python scripts/run_case_suite.py --compare data/ratsnestpro/suite/<baseline>.jso
 
 - [ ] SAME54 industrial-gateway case (RMII PHY, CAN-FD, microSD, 0–10 V analog, 4-layer) to exercise symbol-acquisition fallbacks
 - [ ] `factclaim` step-down chain detection (distinguish regulator input voltage from logic-supply voltage)
-- [ ] Broaden device-family coverage beyond the deterministic ATmega328 reference board
+- [ ] Broaden post-selection fact-sheet and validation-profile coverage beyond the deterministic ATmega328 reference board
 
 ---
 

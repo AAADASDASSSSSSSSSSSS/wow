@@ -51,10 +51,25 @@ MCU_UNUSED_PINS = ["16", "17", "19", "20", "22", "23", "24", "25", "26", "27", "
 # Crystal load capacitor by frequency (illustrative but datasheet-plausible).
 _LOAD_CAP = {8: "22pF", 16: "18pF"}
 
-# LDO catalog by output voltage.
-_LDO = {
-    3.3: ("Regulator_Linear:AP2112K-3.3", "AP2112K-3.3", "AP2112K-3.3"),
-    5.0: ("Regulator_Linear:AP2112K-5.0", "AP2112K-5.0", "AP2112K-5.0"),
+# Input power stage by MCU rail voltage.  A 5 V LDO cannot regulate a 5 V USB
+# input to 5 V, and AP2112K-5.0 does not exist.  The 5 V variant therefore uses
+# a real current-limited, low-resistance USB load switch; the 3.3 V variant uses
+# a real MIC5504-3.3 LDO. Both have concrete, non-placeholder KiCad symbols.
+_POWER_STAGE = {
+    3.3: (
+        "Regulator_Linear:MIC5504-3.3YM5",
+        "MIC5504-3.3YM5-TR",
+        "MIC5504-3.3YM5-TR",
+        "ldo",
+        "1uF",
+    ),
+    5.0: (
+        "Power_Management:AP22804AW5",
+        "AP22804AW5-7",
+        "AP22804AW5-7",
+        "power_switch",
+        "100nF",
+    ),
 }
 
 
@@ -81,7 +96,7 @@ class Atmega328Params(BaseModel):
         if self.crystal_mhz >= 16 and self.ldo_output_v < 4.5:
             raise ValueError(
                 "16 MHz operation requires a 5.0 V supply on ATmega328P; "
-                "either lower the crystal to 8 MHz or select the 5.0 V LDO"
+                "either lower the crystal to 8 MHz or select the protected 5 V rail"
             )
         # Enough GPIO to fill the breakout headers (each row uses 2 pins for
         # power/ground, the rest for signals).
@@ -105,7 +120,7 @@ class Atmega328Params(BaseModel):
 def expectations_for(params: Atmega328Params) -> Expectations:
     return Expectations(
         family=FAMILY_ID,
-        supply_net="3V3",
+        supply_net="5V" if params.ldo_output_v == 5.0 else "3V3",
         supply_voltage_v=params.ldo_output_v,
         gnd_net="GND",
         decoupling_count=params.decoupling_count,
@@ -113,7 +128,7 @@ def expectations_for(params: Atmega328Params) -> Expectations:
         crystal_freq_mhz=params.crystal_mhz,
         crystal_load_cap=params.load_cap,
         ldo_input_cap="1uF",
-        ldo_output_cap="1uF",
+        ldo_output_cap="100nF" if params.ldo_output_v == 5.0 else "1uF",
         power_led=params.power_led,
         header_signal_pins=params.signal_pins,
         mounting_holes=params.mounting_holes,
@@ -149,7 +164,7 @@ def build_ir(params: Atmega328Params | None = None) -> CircuitIR:
     The default parameters reproduce the golden reference board (16 MHz / 5 V,
     six decouplers, power LED, two 8-pin headers, four mounting holes)."""
     params = params or Atmega328Params()
-    supply = "3V3"  # net name kept stable; its voltage carries the rail value
+    supply = "5V" if params.ldo_output_v == 5.0 else "3V3"
     components: list[ComponentSpec] = []
     nets: list[NetSpec] = []
 
@@ -168,25 +183,28 @@ def build_ir(params: Atmega328Params | None = None) -> CircuitIR:
         _r("R2", "5.1k", "usb_cc"),
     ]
 
-    # --- LDO regulator (parameterized output) ------------------------------
-    ldo_symbol, ldo_value, ldo_catalog = _LDO[params.ldo_output_v]
+    # --- protected/regulating input power stage ----------------------------
+    stage_symbol, stage_value, stage_catalog, stage_role, output_cap = (
+        _POWER_STAGE[params.ldo_output_v]
+    )
     components.append(
         ComponentSpec(
             ref="U1",
-            symbol=ldo_symbol,
-            value=ldo_value,
+            symbol=stage_symbol,
+            value=stage_value,
             footprint="Package_TO_SOT_SMD:SOT-23-5",
-            catalog_id=ldo_catalog,
-            role="ldo",
+            catalog_id=stage_catalog,
+            role=stage_role,
             properties={
                 "input_voltage_v": "5.0",
                 "output_voltage_v": str(params.ldo_output_v),
+                "power_stage": "load_switch" if params.ldo_output_v == 5.0 else "ldo",
             },
         )
     )
     components += [
         _c("C9", "1uF", "ldo_input"),
-        _c("C10", "1uF", "ldo_output"),
+        _c("C10", output_cap, "ldo_output"),
     ]
 
     # --- MCU ---------------------------------------------------------------
@@ -303,7 +321,7 @@ def build_ir(params: Atmega328Params | None = None) -> CircuitIR:
     nets.append(NetSpec(name="CC1", pins=pins(("J1", "A5"), ("R1", "1"))))
     nets.append(NetSpec(name="CC2", pins=pins(("J1", "B5"), ("R2", "1"))))
 
-    # Supply rail (3V3 net name; voltage set by LDO output param)
+    # Supply rail after the LDO or protected USB load switch.
     supply_pins: list[tuple[str, str]] = [("U1", "OUT"), ("C10", "1")]
     supply_pins += [("U2", p) for p in MCU_SUPPLY_PINS]
     supply_pins += [(ref, "1") for ref in decoupling_refs]
@@ -388,6 +406,11 @@ def build_ir(params: Atmega328Params | None = None) -> CircuitIR:
         for pin in [*MCU_GPIO_PINS, *MCU_UNUSED_PINS]
         if pin not in mcu_wired
     ]
+    if params.ldo_output_v == 5.0:
+        # AP22804's open-drain fault output is intentionally unused in this
+        # minimal family; declare that decision instead of leaving an ambiguous
+        # dangling pin in ERC.
+        no_connect.append(PinRef(component_ref="U1", pin="3"))
 
     return CircuitIR(
         family=FAMILY_ID,
@@ -401,7 +424,8 @@ def build_ir(params: Atmega328Params | None = None) -> CircuitIR:
             "the crystal loop is short and contains no vias",
         ],
         rationale=(
-            f"USB-C power feeds a {params.ldo_output_v} V LDO. The TQFP-32 MCU uses a "
+            f"USB-C power feeds a protected {params.ldo_output_v} V power stage. "
+            "The TQFP-32 MCU uses a "
             f"{params.crystal_mhz} MHz crystal (load {params.load_cap}). "
             f"{params.decoupling_count} local bypass capacitors are distinguished from "
             "regulator and oscillator capacitors by role."
@@ -419,6 +443,7 @@ def build_plan(params: Atmega328Params | None = None) -> BoardPlan:
         "power_input": 8.0,
         "usb_cc": 14.0,
         "ldo": 20.0,
+        "power_switch": 20.0,
         "ldo_input": 20.0,
         "ldo_output": 20.0,
         "mcu": 35.0,
@@ -442,9 +467,12 @@ def build_plan(params: Atmega328Params | None = None) -> BoardPlan:
             counters["mounting_hole"] = idx + 1
         else:
             x = bands.get(comp.role, 60.0)
-            n = counters.get(comp.role, 0)
+            # Roles sharing a placement band still need distinct coordinates
+            # (for example regulator + input/output capacitors).
+            band_key = f"band:{x}"
+            n = counters.get(band_key, 0)
             y = 10.0 + n * 4.0
-            counters[comp.role] = n + 1
+            counters[band_key] = n + 1
         placements.append(PlacementSpec(ref=comp.ref, x_mm=x, y_mm=y))
 
     return BoardPlan(

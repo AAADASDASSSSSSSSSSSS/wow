@@ -88,13 +88,31 @@ _ROLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "sensor": ("sensor", "传感器", "温湿度", "humidity", "temperature"),
     "usb_esd": ("esd", "tvs", "静电", "浪涌"),
 }
-_MCU_CONSTRAINT_RE = re.compile(
+_IDENTITY_CONSTRAINT_RE = re.compile(
     r"(?:主控(?:器)?(?:必须)?(?:是|为|采用|使用)|"
     r"\bMCU\b[^\n。.]{0,20}?(?:must\s+be|is|shall\s+be|=)|"
     r"(?:main|primary)\s+(?:mcu|microcontroller)[^\n。.]{0,20}?"
     r"(?:must\s+be|is|shall\s+be|=)|"
-    r"固定(?:为|主控)?)",
+    r"固定(?:为|主控)?|\b(?:must\s+)?(?:use|using|select|choose)\b)",
     re.IGNORECASE,
+)
+_IDENTITY_ALTERNATIVE_RE = re.compile(
+    r"(?:\bor\b|\beither\b|或者|或是|均可|都可以|任选|二选一)",
+    re.IGNORECASE,
+)
+_IDENTITY_EXAMPLE_RE = re.compile(
+    r"(?:\be\.g\.\b|\bfor\s+example\b|\bsuch\s+as\b|\blike\b|比如|例如|类似|参考)",
+    re.IGNORECASE,
+)
+_GENERIC_MCU_FAMILY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "STM32",
+        re.compile(r"(?<![A-Za-z0-9])STM32(?![A-Za-z0-9-])", re.IGNORECASE),
+    ),
+    (
+        "ESP32",
+        re.compile(r"(?<![A-Za-z0-9])ESP32(?![A-Za-z0-9-])", re.IGNORECASE),
+    ),
 )
 _FORBID_SUBSTITUTION_RE = re.compile(
     r"(?:不得替换|不能替换|禁止替换|不允许替换|不得使用其他|固定|"
@@ -264,12 +282,13 @@ def _symbol_matches_for(normalized: str) -> tuple[SymbolMatch, ...]:
 
 def _catalog_mpns(token: str) -> tuple[str, ...]:
     try:
-        from ratsnestpro.parts import PartSelector
+        from ratsnestpro.parts import PartConstraint, PartSelector
 
         selector = PartSelector()
-        if not selector.available():
-            return ()
-        hits = selector.search(token, limit=5)
+        hits, _issues = selector.search_catalog(
+            PartConstraint(role="free_text", value=token),
+            limit=5,
+        )
     except Exception:
         return ()
     return tuple(hit.mpn for hit in hits if hit.mpn)
@@ -289,6 +308,27 @@ def _role_for(clause: str, token: str) -> str:
         if any(keyword in lowered for keyword in keywords):
             return role
     return ""
+
+
+def _is_generic_mcu_family(token: str) -> bool:
+    normalized = normalize_order_code(token)
+    return normalized in {"stm32", "esp32"}
+
+
+def mcu_family_options(requirement: str) -> list[str]:
+    """Broad family constraints that selection may choose within."""
+    text = _user_intent_text(requirement)
+    options: list[str] = []
+    for family, pattern in _GENERIC_MCU_FAMILY_PATTERNS:
+        for match in pattern.finditer(text):
+            if is_negated_mention(text, match.start()):
+                continue
+            clause = _clause_around(text, match.start())
+            if _IDENTITY_EXAMPLE_RE.search(clause):
+                continue
+            options.append(family)
+            break
+    return list(dict.fromkeys(options))
 
 
 def resolve_parts(requirement: str) -> list[ResolvedPart]:
@@ -317,7 +357,20 @@ def resolve_parts(requirement: str) -> list[ResolvedPart]:
         catalog = _catalog_mpns(token)
         if catalog:
             sources.append("catalog")
-        pinned = bool(_MCU_CONSTRAINT_RE.search(clause))
+        clause_tokens = [
+            candidate.group(0)
+            for candidate in _PART_TOKEN_RE.finditer(clause)
+            if _is_part_shaped(candidate.group(0))
+        ]
+        alternatives = (
+            len(clause_tokens) > 1 and _IDENTITY_ALTERNATIVE_RE.search(clause)
+        )
+        pinned = bool(
+            _IDENTITY_CONSTRAINT_RE.search(clause)
+            and not alternatives
+            and not _IDENTITY_EXAMPLE_RE.search(clause)
+            and not _is_generic_mcu_family(token)
+        )
         if pinned:
             sources.append("user_constraint")
         if "family" in relations and not {
@@ -357,19 +410,16 @@ def resolve_parts(requirement: str) -> list[ResolvedPart]:
 
 
 def resolve_primary_mcu(requirement: str) -> ResolvedPart | None:
-    """The MCU the user pinned, or the best MCU-library-grounded candidate."""
+    """Return only an MCU identity explicitly fixed by the user.
+
+    Library/catalog matches are evidence for the later selection step. Treating
+    the best mention as the primary MCU here would turn an example or an
+    "STM32 or ESP32" preference into an architecture gate before capabilities
+    had been compared.
+    """
     parts = resolve_parts(requirement)
     pinned = [part for part in parts if part.role == "mcu" and "user_constraint" in part.sources]
-    if pinned:
-        return pinned[0]
-    mcu_library = [
-        part
-        for part in parts
-        if any(match.library.upper().startswith("MCU_") for match in part.symbol_matches)
-    ]
-    if mcu_library:
-        return mcu_library[0]
-    return parts[0] if parts else None
+    return pinned[0] if pinned else None
 
 
 class ComponentConstraint(BaseModel):
@@ -414,6 +464,10 @@ def build_component_constraints(requirement: str) -> list[ComponentConstraint]:
     """Build the structured constraint set once from the original requirement."""
     constraints: list[ComponentConstraint] = []
     for part in resolve_parts(requirement):
+        if _is_generic_mcu_family(part.token):
+            # A broad family narrows the later candidate set; it is not a
+            # component identity that Architect may resolve or acquire now.
+            continue
         if part.substitution == "allowed" and not part.role:
             continue
         constraints.append(
@@ -746,6 +800,9 @@ def required_capabilities(requirement: str) -> list[str]:
     ]
     if "mcu_core" not in found:
         found.append("mcu_core")
+    families = mcu_family_options(requirement)
+    if families:
+        found.append(f"mcu_family_any_of={'|'.join(families)}")
     return found
 
 

@@ -298,6 +298,13 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
       - KICAD_MCP_HOME=/data/ratsnestpro/cache
+      - DIGIKEY_CLIENT_ID=${DIGIKEY_CLIENT_ID:-}
+      - DIGIKEY_CLIENT_SECRET=${DIGIKEY_CLIENT_SECRET:-}
+      - DIGIKEY_ACCESS_TOKEN=${DIGIKEY_ACCESS_TOKEN:-}
+      - DIGIKEY_TOKEN_ENDPOINT=${DIGIKEY_TOKEN_ENDPOINT:-https://api.digikey.com/v1/oauth2/token}
+      - DIGIKEY_SEARCH_ENDPOINT=${DIGIKEY_SEARCH_ENDPOINT:-https://api.digikey.com/products/v4/search/keyword}
+      - MOUSER_API_KEY=${MOUSER_API_KEY:-}
+      - MOUSER_SEARCH_ENDPOINT=${MOUSER_SEARCH_ENDPOINT:-https://api.mouser.com/api/v1/search/partnumber}
       - KICAD_PYTHON=/usr/bin/python3
       - KICAD_SYMBOL_DIR=/usr/share/kicad/symbols
       - KICAD_FOOTPRINT_DIR=/usr/share/kicad/footprints
@@ -372,6 +379,13 @@ services:
       - RATSNESTPRO_TEMPORAL_RETRY_ATTEMPTS=${RATSNESTPRO_TEMPORAL_RETRY_ATTEMPTS:-3}
       - RATSNESTPRO_WORKSPACE_ROOT=/data/ratsnestpro
       - KICAD_MCP_HOME=/data/ratsnestpro/cache
+      - DIGIKEY_CLIENT_ID=${DIGIKEY_CLIENT_ID:-}
+      - DIGIKEY_CLIENT_SECRET=${DIGIKEY_CLIENT_SECRET:-}
+      - DIGIKEY_ACCESS_TOKEN=${DIGIKEY_ACCESS_TOKEN:-}
+      - DIGIKEY_TOKEN_ENDPOINT=${DIGIKEY_TOKEN_ENDPOINT:-https://api.digikey.com/v1/oauth2/token}
+      - DIGIKEY_SEARCH_ENDPOINT=${DIGIKEY_SEARCH_ENDPOINT:-https://api.digikey.com/products/v4/search/keyword}
+      - MOUSER_API_KEY=${MOUSER_API_KEY:-}
+      - MOUSER_SEARCH_ENDPOINT=${MOUSER_SEARCH_ENDPOINT:-https://api.mouser.com/api/v1/search/partnumber}
       - KICAD_PYTHON=/usr/bin/python3
       - KICAD_SYMBOL_DIR=/usr/share/kicad/symbols
       - KICAD_FOOTPRINT_DIR=/usr/share/kicad/footprints
